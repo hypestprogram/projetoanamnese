@@ -17,7 +17,8 @@ def transcrever_audio():
 
     audio_file = request.files['audio']
     audio_bytes = BytesIO(audio_file.read())
-    
+    audio_bytes.name = "audio.wav"  # Defina um nome fictício para o arquivo
+
     try:
         transcript = openai.Audio.transcribe("whisper-1", audio_bytes)
         return jsonify({"transcricao": transcript['text']})
