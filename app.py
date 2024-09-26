@@ -2,7 +2,7 @@ import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
-from dotenv import load_dotenv  # Adiciona dotenv para carregar o .env
+from dotenv import load_dotenv  # Carregar dotenv para carregar variáveis de ambiente
 
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
@@ -34,19 +34,19 @@ def anamnese_texto():
         return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
 
     try:
-        resumo = openai.Completion.create(
-            model="text-davinci-003",
-            prompt=f"Resuma o seguinte texto: {texto}",
+        resumo = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "system", "content": "Resuma o seguinte texto:"}, {"role": "user", "content": texto}],
             max_tokens=150
         )
-        topicos = openai.Completion.create(
-            model="text-davinci-003",
-            prompt=f"Liste os tópicos principais do seguinte texto: {texto}",
+        topicos = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "system", "content": "Liste os tópicos principais do seguinte texto:"}, {"role": "user", "content": texto}],
             max_tokens=100
         )
         return {
-            "resumo": resumo['choices'][0]['text'].strip(),
-            "topicos": topicos['choices'][0]['text'].strip()
+            "resumo": resumo['choices'][0]['message']['content'].strip(),
+            "topicos": topicos['choices'][0]['message']['content'].strip()
         }
     except Exception as e:
         return jsonify({"error": str(e)}), 500
