@@ -1,14 +1,14 @@
 import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import assemblyai as aai
+import openai
 from io import BytesIO
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Habilitar CORS
 
-# Configurar a chave da API da AssemblyAI diretamente no código
-aai.settings.api_key = "065ae935676a4a3db93a4d1ac0d6b1c6"  # Substitua pela sua chave da API
+# Configurar a chave da API da OpenAI diretamente no código
+openai.api_key = "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"
 
 @app.route('/transcrever', methods=['POST'])
 def transcrever_audio():
@@ -19,8 +19,7 @@ def transcrever_audio():
     audio_bytes = BytesIO(audio_file.read())
     
     try:
-        # Enviar o áudio para transcrição usando AssemblyAI
-        transcript = aai.Transcriber().transcribe(audio_bytes)
+        transcript = openai.Audio.transcribe("whisper-1", audio_bytes)
         return jsonify({"transcricao": transcript['text']})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -34,13 +33,12 @@ def anamnese_texto():
         return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
 
     try:
-        # Usar AssemblyAI ou qualquer outro modelo para gerar resumo e tópicos
-        resumo = aai.Completion.create(
+        resumo = openai.Completion.create(
             model="text-davinci-003",
             prompt=f"Resuma o seguinte texto: {texto}",
             max_tokens=150
         )
-        topicos = aai.Completion.create(
+        topicos = openai.Completion.create(
             model="text-davinci-003",
             prompt=f"Liste os tópicos principais do seguinte texto: {texto}",
             max_tokens=100
