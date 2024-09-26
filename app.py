@@ -2,13 +2,16 @@ import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
-from io import BytesIO
+from dotenv import load_dotenv  # Adiciona dotenv para carregar o .env
+
+# Carregar variáveis de ambiente do arquivo .env
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)  # Habilitar CORS
 
-# Configurar a chave da API da OpenAI diretamente no código
-openai.api_key = "sk-n4FiSy59eeJXSVGlWpJIQn5oVZcAMaWwplhii4EFn9T3BlbkFJMlsQdkEXZ-5xpNkLWG2H6GSk-QysNFxVkdiZXp8oMA"
+# Configurar a chave da API da OpenAI usando variável de ambiente
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @app.route('/transcrever', methods=['POST'])
 def transcrever_audio():
@@ -16,10 +19,8 @@ def transcrever_audio():
         return jsonify({"error": "Nenhum arquivo de áudio enviado"}), 400
 
     audio_file = request.files['audio']
-    audio_bytes = BytesIO(audio_file.read())
-    
     try:
-        transcript = openai.Audio.transcribe("whisper-1", audio_bytes)
+        transcript = openai.Audio.transcribe("whisper-1", audio_file)
         return jsonify({"transcricao": transcript['text']})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
