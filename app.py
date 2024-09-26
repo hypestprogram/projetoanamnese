@@ -2,7 +2,6 @@ import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
-from io import BytesIO
 
 app = Flask(__name__)
 CORS(app)  # Habilitar CORS
@@ -16,10 +15,10 @@ def transcrever_audio():
         return jsonify({"error": "Nenhum arquivo de áudio enviado"}), 400
 
     audio_file = request.files['audio']
-    audio_bytes = BytesIO(audio_file.read())
-    
+
     try:
-        transcript = openai.Audio.transcribe("whisper-1", audio_bytes)
+        # Enviar o arquivo diretamente para o Whisper API
+        transcript = openai.Audio.transcribe("whisper-1", audio_file)
         return jsonify({"transcricao": transcript['text']})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
