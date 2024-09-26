@@ -12,7 +12,7 @@ app = Flask(__name__)
 CORS(app)  # Habilitar CORS
 
 # Configurar a chave da API da OpenAI
-openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = os.getenv("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")
 
 @app.route('/transcrever', methods=['POST'])
 def transcrever_audio():
