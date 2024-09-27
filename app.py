@@ -20,36 +20,32 @@ def transcrever_audio():
         return jsonify({"error": "Nenhum arquivo de áudio enviado"}), 400
 
     audio_file = request.files['audio']
-
     try:
-        # Certificar-se de que o arquivo tem um nome e tipo de conteúdo adequado
-        if audio_file.filename == '':
-            return jsonify({"error": "Nenhum arquivo selecionado"}), 400
-
         # Ler o arquivo de áudio e criar um objeto BytesIO
         audio_bytes = audio_file.read()
         audio_stream = io.BytesIO(audio_bytes)
-        audio_stream.name = audio_file.filename  # Definir o nome do arquivo
+        # Definir o atributo 'name' com a extensão apropriada
+        audio_stream.name = audio_file.filename or 'audio.webm'
 
-        # Realizar a transcrição usando a API OpenAI
+        # Transcrever o áudio usando o modelo Whisper da OpenAI
         transcript = openai.Audio.transcribe("whisper-1", audio_stream)
         return jsonify({"transcricao": transcript['text']})
     except Exception as e:
-        # Adicionar mais detalhes ao erro para depuração
+        # Imprimir o erro nos logs do servidor para depuração
         error_message = str(e)
         print(f"Erro na transcrição: {error_message}")
         return jsonify({"error": error_message}), 500
 
 @app.route('/anamnese', methods=['POST'])
 def anamnese_texto():
-    data = request.json
+    data = request.get_json()
     texto = data.get('texto', '')
 
     if not texto:
         return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
 
     try:
-        resumo = openai.ChatCompletion.create(
+        resumo_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Resuma o seguinte texto:"},
@@ -57,7 +53,7 @@ def anamnese_texto():
             ],
             max_tokens=150
         )
-        topicos = openai.ChatCompletion.create(
+        topicos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Liste os tópicos principais do seguinte texto:"},
@@ -65,9 +61,11 @@ def anamnese_texto():
             ],
             max_tokens=100
         )
+        resumo = resumo_response['choices'][0]['message']['content'].strip()
+        topicos = topicos_response['choices'][0]['message']['content'].strip()
         return jsonify({
-            "resumo": resumo['choices'][0]['message']['content'].strip(),
-            "topicos": topicos['choices'][0]['message']['content'].strip()
+            "resumo": resumo,
+            "topicos": topicos
         })
     except Exception as e:
         error_message = str(e)
