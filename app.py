@@ -3,6 +3,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
 from dotenv import load_dotenv  # Carregar dotenv para carregar variáveis de ambiente
+import io
 
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
@@ -19,11 +20,25 @@ def transcrever_audio():
         return jsonify({"error": "Nenhum arquivo de áudio enviado"}), 400
 
     audio_file = request.files['audio']
+
     try:
-        transcript = openai.Audio.transcribe("whisper-1", audio_file)
+        # Certificar-se de que o arquivo tem um nome e tipo de conteúdo adequado
+        if audio_file.filename == '':
+            return jsonify({"error": "Nenhum arquivo selecionado"}), 400
+
+        # Ler o arquivo de áudio e criar um objeto BytesIO
+        audio_bytes = audio_file.read()
+        audio_stream = io.BytesIO(audio_bytes)
+        audio_stream.name = audio_file.filename  # Definir o nome do arquivo
+
+        # Realizar a transcrição usando a API OpenAI
+        transcript = openai.Audio.transcribe("whisper-1", audio_stream)
         return jsonify({"transcricao": transcript['text']})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # Adicionar mais detalhes ao erro para depuração
+        error_message = str(e)
+        print(f"Erro na transcrição: {error_message}")
+        return jsonify({"error": error_message}), 500
 
 @app.route('/anamnese', methods=['POST'])
 def anamnese_texto():
@@ -36,20 +51,28 @@ def anamnese_texto():
     try:
         resumo = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Resuma o seguinte texto:"}, {"role": "user", "content": texto}],
+            messages=[
+                {"role": "system", "content": "Resuma o seguinte texto:"},
+                {"role": "user", "content": texto}
+            ],
             max_tokens=150
         )
         topicos = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Liste os tópicos principais do seguinte texto:"}, {"role": "user", "content": texto}],
+            messages=[
+                {"role": "system", "content": "Liste os tópicos principais do seguinte texto:"},
+                {"role": "user", "content": texto}
+            ],
             max_tokens=100
         )
-        return {
+        return jsonify({
             "resumo": resumo['choices'][0]['message']['content'].strip(),
             "topicos": topicos['choices'][0]['message']['content'].strip()
-        }
+        })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        error_message = str(e)
+        print(f"Erro na anamnese: {error_message}")
+        return jsonify({"error": error_message}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
