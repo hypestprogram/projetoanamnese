@@ -9,7 +9,7 @@ import io
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Habilitar CORS
 
 # Configurar a chave da API da OpenAI usando variável de ambiente
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -30,8 +30,8 @@ def transcrever_audio():
         mime_type = audio_file.mimetype
         print(f"Tipo de arquivo recebido: {mime_type}")  # Log para depuração
 
-        # Ampliar os formatos suportados, incluindo mp4
-        supported_formats = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
+        # Certificar que o arquivo é de um dos formatos suportados
+        supported_formats = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav']
         if mime_type not in supported_formats:
             return jsonify({"error": f"Formato de arquivo não suportado: {mime_type}. Formatos suportados: {supported_formats}"}), 400
 
