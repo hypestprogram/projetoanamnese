@@ -77,12 +77,24 @@ def anamnese_texto():
             max_tokens=100
         )
 
+        # Criar a solicitação para listar possíveis tratamentos e medicamentos
+        tratamentos_response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Liste os possíveis tratamentos e medicamentos para o seguinte caso clínico:"},
+                {"role": "user", "content": texto}
+            ],
+            max_tokens=200
+        )
+
         resumo = resumo_response['choices'][0]['message']['content'].strip()
         topicos = topicos_response['choices'][0]['message']['content'].strip()
+        tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
 
         return jsonify({
             "resumo": resumo,
-            "topicos": topicos
+            "topicos": topicos,
+            "tratamentos": tratamentos
         })
     except Exception as e:
         error_message = str(e)
