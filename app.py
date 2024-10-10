@@ -77,14 +77,14 @@ def anamnese_texto():
             max_tokens=100
         )
 
-        # Criar a solicitação para listar possíveis tratamentos e medicamentos
+        # Criar a solicitação para listar possíveis tratamentos e medicamentos (somente nome)
         tratamentos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Liste os possíveis tratamentos e medicamentos para o seguinte caso clínico:"},
+                {"role": "system", "content": "Liste apenas os nomes dos tratamentos e medicamentos para o seguinte caso clínico:"},
                 {"role": "user", "content": texto}
             ],
-            max_tokens=200
+            max_tokens=100  # Limitando o tamanho para focar apenas nos nomes
         )
 
         resumo = resumo_response['choices'][0]['message']['content'].strip()
