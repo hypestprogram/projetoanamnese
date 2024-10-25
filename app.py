@@ -6,7 +6,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pydub import AudioSegment
 from google.cloud import speech_v1p1beta1 as speech
-from openai.error import OpenAIError
+from openai import OpenAIError  # Importação corrigida
 
 # Carregar variáveis de ambiente e configurar as credenciais do Google Cloud
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
@@ -37,7 +37,7 @@ def convert_audio(audio_bytes, target_format='wav'):
     """Converte áudio para WAV e detecta a taxa de amostragem."""
     try:
         audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
-        sample_rate = audio.frame_rate  # Detecta a taxa de amostragem do áudio original
+        sample_rate = audio.frame_rate or 16000  # Fallback para 16000 Hz se não detectado
 
         audio_io = io.BytesIO()
         audio.export(audio_io, format=target_format)
@@ -80,7 +80,7 @@ def transcrever_audio():
         audio = speech.RecognitionAudio(content=audio_stream.read())
         config = speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=sample_rate,  # Ajusta automaticamente para a taxa detectada
+            sample_rate_hertz=sample_rate,
             language_code="pt-BR"
         )
 
