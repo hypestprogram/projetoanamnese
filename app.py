@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import io
 from pydub import AudioSegment
 from openai.error import OpenAIError
-import subprocess  # Import necessário para a verificação do FFmpeg
+import subprocess
 
 # Carregar variáveis de ambiente
 load_dotenv()
@@ -37,6 +37,7 @@ def convert_audio(audio_bytes, target_format='wav'):
         audio_io = io.BytesIO()
         audio.export(audio_io, format=target_format)
         audio_io.seek(0)
+        print(f"Áudio convertido para: {target_format}")
         return audio_io
     except Exception as e:
         print(f"Erro na conversão de áudio: {str(e)}")
@@ -69,6 +70,9 @@ def transcrever_audio():
         # Converter qualquer formato para WAV para evitar problemas de compatibilidade
         audio_stream = convert_audio(audio_bytes, target_format='wav')
         audio_stream.name = audio_file.filename or 'audio.wav'
+
+        # Verificar tamanho e conteúdo do áudio antes de enviar
+        print(f"Tamanho do áudio em bytes: {audio_stream.getbuffer().nbytes}")
 
         # Realizar a transcrição com Whisper
         transcript = openai.Audio.transcribe("whisper-1", audio_stream, timeout=30)
