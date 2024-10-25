@@ -4,27 +4,36 @@ from flask_cors import CORS
 import openai
 from dotenv import load_dotenv
 import io
+from pydub import AudioSegment
 from openai.error import OpenAIError
 
-# Carregar variáveis de ambiente do arquivo .env
+# Carregar variáveis de ambiente
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})  # CORS configurado corretamente
+CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Validar se a chave da API foi carregada
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
-    raise EnvironmentError("A chave da API OpenAI não foi encontrada nas variáveis de ambiente.")
-openai.api_key = api_key
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav']
+# Formatos suportados
+SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
+
+def convert_audio(audio_bytes, target_format='wav'):
+    """Converte áudio para o formato especificado (WAV ou WebM)."""
+    try:
+        audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
+        audio_io = io.BytesIO()
+        audio.export(audio_io, format=target_format)
+        audio_io.seek(0)
+        return audio_io
+    except Exception as e:
+        print(f"Erro na conversão de áudio: {str(e)}")
+        raise
 
 @app.route('/', methods=['GET'])
 def health_check():
     return jsonify({"status": "API ativa e funcionando"}), 200
 
-# Endpoint para transcrição de áudio
 @app.route('/transcrever', methods=['POST'])
 def transcrever_audio():
     if 'audio' not in request.files:
@@ -36,10 +45,6 @@ def transcrever_audio():
         if len(audio_bytes) == 0:
             return jsonify({"error": "Arquivo de áudio vazio ou inválido."}), 400
 
-        # Logs para depuração
-        print(f"Arquivo recebido: {audio_file.filename}, Tamanho: {len(audio_bytes)} bytes")
-        
-        audio_stream = io.BytesIO(audio_bytes)
         mime_type = audio_file.mimetype
         print(f"Tipo de arquivo recebido: {mime_type}")
 
@@ -49,9 +54,15 @@ def transcrever_audio():
                          f"Formatos suportados: {SUPPORTED_FORMATS}"
             }), 400
 
-        audio_stream.name = audio_file.filename or 'audio.webm'
+        # Converter MP4 para WAV ou WebM
+        if mime_type == 'audio/mp4':
+            audio_stream = convert_audio(audio_bytes, target_format='wav')
+        else:
+            audio_stream = io.BytesIO(audio_bytes)
 
-        # Aumentar o timeout para evitar problemas de conexão
+        audio_stream.name = audio_file.filename or 'audio.wav'
+
+        # Realizar a transcrição com Whisper
         transcript = openai.Audio.transcribe("whisper-1", audio_stream, timeout=30)
         return jsonify({"transcricao": transcript['text']})
 
@@ -63,7 +74,6 @@ def transcrever_audio():
         print(f"Erro inesperado: {str(e)}")
         return jsonify({"error": f"Erro inesperado: {str(e)}"}), 500
 
-# Endpoint para processar o texto de anamnese
 @app.route('/anamnese', methods=['POST'])
 def anamnese_texto():
     data = request.get_json()
@@ -73,26 +83,22 @@ def anamnese_texto():
         return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
 
     try:
-        # Chamada para criar resumo
         resumo_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "system", "content": "Resuma o seguinte texto:"}, {"role": "user", "content": texto}],
             max_tokens=150
         )
-        # Chamada para listar tópicos
         topicos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "system", "content": "Liste os tópicos principais do texto:"}, {"role": "user", "content": texto}],
             max_tokens=100
         )
-        # Chamada para listar tratamentos ou exames
         tratamentos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "system", "content": "Liste exames ou medicamentos apropriados:"}, {"role": "user", "content": texto}],
             max_tokens=100
         )
 
-        # Extração dos resultados
         resumo = resumo_response['choices'][0]['message']['content'].strip()
         topicos = topicos_response['choices'][0]['message']['content'].strip()
         tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
