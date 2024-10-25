@@ -10,9 +10,13 @@ from openai.error import OpenAIError
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)  # Habilitar CORS
+CORS(app, resources={r"/*": {"origins": "*"}})  # CORS configurado corretamente
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Validar se a chave da API foi carregada
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise EnvironmentError("A chave da API OpenAI não foi encontrada nas variáveis de ambiente.")
+openai.api_key = api_key
 
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav']
 
@@ -32,23 +36,29 @@ def transcrever_audio():
         if len(audio_bytes) == 0:
             return jsonify({"error": "Arquivo de áudio vazio ou inválido."}), 400
 
+        # Logs para depuração
+        print(f"Arquivo recebido: {audio_file.filename}, Tamanho: {len(audio_bytes)} bytes")
+        
         audio_stream = io.BytesIO(audio_bytes)
         mime_type = audio_file.mimetype
         print(f"Tipo de arquivo recebido: {mime_type}")
 
         if mime_type not in SUPPORTED_FORMATS:
             return jsonify({
-                "error": f"Formato de arquivo não suportado: {mime_type}. "
+                "error": f"Formato não suportado: {mime_type}. "
                          f"Formatos suportados: {SUPPORTED_FORMATS}"
             }), 400
 
         audio_stream.name = audio_file.filename or 'audio.webm'
-        transcript = openai.Audio.transcribe("whisper-1", audio_stream, timeout=15)
+
+        # Aumentar o timeout para evitar problemas de conexão
+        transcript = openai.Audio.transcribe("whisper-1", audio_stream, timeout=30)
         return jsonify({"transcricao": transcript['text']})
 
     except OpenAIError as e:
         print(f"Erro na API OpenAI: {str(e)}")
         return jsonify({"error": f"Erro na API: {str(e)}"}), 500
+
     except Exception as e:
         print(f"Erro inesperado: {str(e)}")
         return jsonify({"error": f"Erro inesperado: {str(e)}"}), 500
@@ -63,22 +73,26 @@ def anamnese_texto():
         return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
 
     try:
+        # Chamada para criar resumo
         resumo_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "system", "content": "Resuma o seguinte texto:"}, {"role": "user", "content": texto}],
             max_tokens=150
         )
+        # Chamada para listar tópicos
         topicos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "system", "content": "Liste os tópicos principais do texto:"}, {"role": "user", "content": texto}],
             max_tokens=100
         )
+        # Chamada para listar tratamentos ou exames
         tratamentos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "system", "content": "Liste exames ou medicamentos apropriados:"}, {"role": "user", "content": texto}],
             max_tokens=100
         )
 
+        # Extração dos resultados
         resumo = resumo_response['choices'][0]['message']['content'].strip()
         topicos = topicos_response['choices'][0]['message']['content'].strip()
         tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
