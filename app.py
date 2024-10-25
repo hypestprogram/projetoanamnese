@@ -11,19 +11,16 @@ from openai.error import OpenAIError
 # Carregar variáveis de ambiente e configurar as credenciais do Google Cloud
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
-# Escreve o JSON de credenciais em um arquivo temporário
 if GOOGLE_CREDENTIALS_JSON:
     with open("/tmp/credentials.json", "w") as f:
         f.write(GOOGLE_CREDENTIALS_JSON)
 
-# Configurar a variável de ambiente para apontar para o arquivo temporário
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/credentials.json"
 
 # Inicializar o app Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Formatos suportados
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
 
 def verificar_ffmpeg():
@@ -34,20 +31,20 @@ def verificar_ffmpeg():
     except subprocess.CalledProcessError as e:
         print(f"Erro ao verificar FFmpeg: {e.stderr}")
 
-# Verificar o FFmpeg no início do serviço
 verificar_ffmpeg()
 
-def convert_audio(audio_bytes, target_format='wav', target_sample_rate=16000):
-    """Converte áudio para o formato especificado e a taxa de amostragem definida."""
+def convert_audio(audio_bytes, target_format='wav'):
+    """Converte áudio para WAV e detecta a taxa de amostragem."""
     try:
         audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
-        audio = audio.set_frame_rate(target_sample_rate)  # Ajuste da taxa de amostragem
+        sample_rate = audio.frame_rate  # Detecta a taxa de amostragem do áudio original
 
         audio_io = io.BytesIO()
         audio.export(audio_io, format=target_format)
         audio_io.seek(0)
-        print(f"Áudio convertido para: {target_format} com {target_sample_rate} Hz")
-        return audio_io
+
+        print(f"Áudio convertido para: {target_format} com taxa de {sample_rate} Hz")
+        return audio_io, sample_rate
     except Exception as e:
         print(f"Erro na conversão de áudio: {str(e)}")
         raise
@@ -71,23 +68,19 @@ def transcrever_audio():
         print(f"Tipo de arquivo recebido: {mime_type}")
 
         if mime_type not in SUPPORTED_FORMATS:
-            return jsonify({
-                "error": f"Formato não suportado: {mime_type}. "
-                         f"Formatos suportados: {SUPPORTED_FORMATS}"
-            }), 400
+            return jsonify({"error": f"Formato não suportado: {mime_type}. Formatos suportados: {SUPPORTED_FORMATS}"}), 400
 
-        # Converter o áudio para WAV com 16kHz
-        audio_stream = convert_audio(audio_bytes, target_format='wav', target_sample_rate=16000)
-        audio_content = audio_stream.read()
+        # Converter áudio e detectar taxa de amostragem
+        audio_stream, sample_rate = convert_audio(audio_bytes)
 
         # Configurar o cliente de Speech-to-Text do Google Cloud
         client = speech.SpeechClient()
 
         # Configurar a requisição de reconhecimento de áudio
-        audio = speech.RecognitionAudio(content=audio_content)
+        audio = speech.RecognitionAudio(content=audio_stream.read())
         config = speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=16000,  # Taxa de amostragem agora correta
+            sample_rate_hertz=sample_rate,  # Ajusta automaticamente para a taxa detectada
             language_code="pt-BR"
         )
 
