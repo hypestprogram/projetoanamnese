@@ -6,11 +6,10 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pydub import AudioSegment
 from google.cloud import speech_v1p1beta1 as speech
-import openai
+from openai.error import OpenAIError
 
 # Carregar variáveis de ambiente e configurar as credenciais do Google Cloud
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Escreve o JSON de credenciais em um arquivo temporário
 if GOOGLE_CREDENTIALS_JSON:
@@ -23,9 +22,6 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/credentials.json"
 # Inicializar o app Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
-
-# Inicializar a API da OpenAI
-openai.api_key = OPENAI_API_KEY
 
 # Formatos suportados
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
@@ -41,14 +37,16 @@ def verificar_ffmpeg():
 # Verificar o FFmpeg no início do serviço
 verificar_ffmpeg()
 
-def convert_audio(audio_bytes, target_format='wav'):
-    """Converte áudio para o formato especificado (WAV por padrão)."""
+def convert_audio(audio_bytes, target_format='wav', target_sample_rate=16000):
+    """Converte áudio para o formato especificado e a taxa de amostragem definida."""
     try:
         audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
+        audio = audio.set_frame_rate(target_sample_rate)  # Ajuste da taxa de amostragem
+
         audio_io = io.BytesIO()
         audio.export(audio_io, format=target_format)
         audio_io.seek(0)
-        print(f"Áudio convertido para: {target_format}")
+        print(f"Áudio convertido para: {target_format} com {target_sample_rate} Hz")
         return audio_io
     except Exception as e:
         print(f"Erro na conversão de áudio: {str(e)}")
@@ -78,8 +76,8 @@ def transcrever_audio():
                          f"Formatos suportados: {SUPPORTED_FORMATS}"
             }), 400
 
-        # Converter o áudio para WAV
-        audio_stream = convert_audio(audio_bytes, target_format='wav')
+        # Converter o áudio para WAV com 16kHz
+        audio_stream = convert_audio(audio_bytes, target_format='wav', target_sample_rate=16000)
         audio_content = audio_stream.read()
 
         # Configurar o cliente de Speech-to-Text do Google Cloud
@@ -89,7 +87,7 @@ def transcrever_audio():
         audio = speech.RecognitionAudio(content=audio_content)
         config = speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=16000,
+            sample_rate_hertz=16000,  # Taxa de amostragem agora correta
             language_code="pt-BR"
         )
 
@@ -98,25 +96,60 @@ def transcrever_audio():
 
         # Extrair o texto transcrito
         transcript = " ".join([result.alternatives[0].transcript for result in response.results])
-        print(f"Texto transcrito: {transcript}")
 
-        # Enviar o texto transcrito para a API da OpenAI
-        openai_response = openai.ChatCompletion.create(
+        return jsonify({"transcricao": transcript})
+
+    except Exception as e:
+        print(f"Erro inesperado: {str(e)}")
+        return jsonify({"error": f"Erro inesperado: {str(e)}"}), 500
+
+@app.route('/anamnese', methods=['POST'])
+def anamnese_texto():
+    data = request.get_json()
+    texto = data.get('texto', '')
+
+    if not texto:
+        return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
+
+    try:
+        resumo_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Você é um assistente que ajuda a processar transcrições."},
-                {"role": "user", "content": transcript}
+                {"role": "system", "content": "Resuma o seguinte texto:"},
+                {"role": "user", "content": texto}
             ],
             max_tokens=150
         )
+        topicos_response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Liste os tópicos principais do texto:"},
+                {"role": "user", "content": texto}
+            ],
+            max_tokens=100
+        )
+        tratamentos_response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Liste exames ou medicamentos apropriados:"},
+                {"role": "user", "content": texto}
+            ],
+            max_tokens=100
+        )
 
-        # Extrair a resposta da OpenAI
-        processed_text = openai_response['choices'][0]['message']['content'].strip()
+        resumo = resumo_response['choices'][0]['message']['content'].strip()
+        topicos = topicos_response['choices'][0]['message']['content'].strip()
+        tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
 
         return jsonify({
-            "transcricao": transcript,
-            "processado": processed_text
+            "resumo": resumo,
+            "topicos": topicos,
+            "tratamentos": tratamentos
         })
+
+    except OpenAIError as e:
+        print(f"Erro na API OpenAI: {str(e)}")
+        return jsonify({"error": f"Erro na API: {str(e)}"}), 500
 
     except Exception as e:
         print(f"Erro inesperado: {str(e)}")
