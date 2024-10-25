@@ -1,7 +1,7 @@
 import os
+import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import openai
 from dotenv import load_dotenv
 import io
 from pydub import AudioSegment
@@ -16,7 +16,6 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Formatos suportados
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
 
 def verificar_ffmpeg():
@@ -31,9 +30,10 @@ def verificar_ffmpeg():
 verificar_ffmpeg()
 
 def convert_audio(audio_bytes, target_format='wav'):
-    """Converte áudio para o formato especificado (WAV por padrão)."""
+    """Converte áudio para WAV com parâmetros apropriados."""
     try:
         audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
+        audio = audio.set_frame_rate(16000).set_channels(1)  # Força taxa de amostragem e canal
         audio_io = io.BytesIO()
         audio.export(audio_io, format=target_format)
         audio_io.seek(0)
@@ -53,6 +53,7 @@ def transcrever_audio():
         return jsonify({"error": "Nenhum arquivo de áudio enviado"}), 400
 
     audio_file = request.files['audio']
+
     try:
         audio_bytes = audio_file.read()
         if len(audio_bytes) == 0:
@@ -67,11 +68,11 @@ def transcrever_audio():
                          f"Formatos suportados: {SUPPORTED_FORMATS}"
             }), 400
 
-        # Converter qualquer formato para WAV para evitar problemas de compatibilidade
+        # Converter para WAV com parâmetros apropriados
         audio_stream = convert_audio(audio_bytes, target_format='wav')
         audio_stream.name = audio_file.filename or 'audio.wav'
 
-        # Verificar tamanho e conteúdo do áudio antes de enviar
+        # Verificar tamanho do áudio
         print(f"Tamanho do áudio em bytes: {audio_stream.getbuffer().nbytes}")
 
         # Realizar a transcrição com Whisper
@@ -98,26 +99,17 @@ def anamnese_texto():
     try:
         resumo_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Resuma o seguinte texto:"},
-                {"role": "user", "content": texto}
-            ],
+            messages=[{"role": "system", "content": "Resuma o seguinte texto:"}, {"role": "user", "content": texto}],
             max_tokens=150
         )
         topicos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Liste os tópicos principais do texto:"},
-                {"role": "user", "content": texto}
-            ],
+            messages=[{"role": "system", "content": "Liste os tópicos principais do texto:"}, {"role": "user", "content": texto}],
             max_tokens=100
         )
         tratamentos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Liste exames ou medicamentos apropriados:"},
-                {"role": "user", "content": texto}
-            ],
+            messages=[{"role": "system", "content": "Liste exames ou medicamentos apropriados:"}, {"role": "user", "content": texto}],
             max_tokens=100
         )
 
@@ -125,11 +117,7 @@ def anamnese_texto():
         topicos = topicos_response['choices'][0]['message']['content'].strip()
         tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
 
-        return jsonify({
-            "resumo": resumo,
-            "topicos": topicos,
-            "tratamentos": tratamentos
-        })
+        return jsonify({"resumo": resumo, "topicos": topicos, "tratamentos": tratamentos})
 
     except openai.error.OpenAIError as e:
         print(f"Erro na API OpenAI: {str(e)}")
