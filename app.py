@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import io
 from pydub import AudioSegment
 from openai.error import OpenAIError
+import subprocess  # Import necessário para a verificação do FFmpeg
 
 # Carregar variáveis de ambiente
 load_dotenv()
@@ -15,11 +16,22 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Formatos de áudio suportados
+# Formatos suportados
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
 
+def verificar_ffmpeg():
+    """Verifica se o FFmpeg está instalado e disponível."""
+    try:
+        result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True, check=True)
+        print(f"Versão do FFmpeg: {result.stdout}")
+    except subprocess.CalledProcessError as e:
+        print(f"Erro ao verificar FFmpeg: {e.stderr}")
+
+# Verifica o FFmpeg no início do serviço
+verificar_ffmpeg()
+
 def convert_audio(audio_bytes, target_format='wav'):
-    """Converte áudio recebido para o formato especificado."""
+    """Converte áudio para o formato especificado (WAV por padrão)."""
     try:
         audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
         audio_io = io.BytesIO()
@@ -54,12 +66,13 @@ def transcrever_audio():
                          f"Formatos suportados: {SUPPORTED_FORMATS}"
             }), 400
 
-        # Converter áudio para WAV, se necessário, para compatibilidade com a API da OpenAI
+        # Converter qualquer formato para WAV para evitar problemas de compatibilidade
         audio_stream = convert_audio(audio_bytes, target_format='wav')
         audio_stream.name = audio_file.filename or 'audio.wav'
 
-        # Enviar para transcrição com Whisper
+        # Realizar a transcrição com Whisper
         transcript = openai.Audio.transcribe("whisper-1", audio_stream, timeout=30)
+
         return jsonify({"transcricao": transcript['text']})
 
     except OpenAIError as e:
