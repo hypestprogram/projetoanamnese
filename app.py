@@ -1,27 +1,26 @@
 import os
 import io
+import json
 import subprocess
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-
-# Tentar importar a biblioteca OpenAI com captura de erro
-try:
-    import openai
-except ImportError as e:
-    print(f"Erro ao importar OpenAI: {str(e)}")
-    raise
-
-from dotenv import load_dotenv
 from pydub import AudioSegment
-from openai.error import OpenAIError
+from google.cloud import speech_v1p1beta1 as speech
 
-# Carregar variáveis de ambiente
-load_dotenv()
+# Carregar variáveis de ambiente e configurar as credenciais do Google Cloud
+GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
+# Escreve o JSON de credenciais em um arquivo temporário
+if GOOGLE_CREDENTIALS_JSON:
+    with open("/tmp/credentials.json", "w") as f:
+        f.write(GOOGLE_CREDENTIALS_JSON)
+
+# Configurar a variável de ambiente para apontar para o arquivo temporário
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/credentials.json"
+
+# Inicializar o app Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
-
-openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Formatos suportados
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
@@ -34,7 +33,7 @@ def verificar_ffmpeg():
     except subprocess.CalledProcessError as e:
         print(f"Erro ao verificar FFmpeg: {e.stderr}")
 
-# Verificar FFmpeg no início do serviço
+# Verificar o FFmpeg no início do serviço
 verificar_ffmpeg()
 
 def convert_audio(audio_bytes, target_format='wav'):
@@ -74,21 +73,28 @@ def transcrever_audio():
                          f"Formatos suportados: {SUPPORTED_FORMATS}"
             }), 400
 
-        # Converter qualquer formato para WAV para evitar problemas de compatibilidade
+        # Converter o áudio para WAV
         audio_stream = convert_audio(audio_bytes, target_format='wav')
-        audio_stream.name = audio_file.filename or 'audio.wav'
+        audio_content = audio_stream.read()
 
-        # Verificar tamanho do áudio
-        print(f"Tamanho do áudio em bytes: {audio_stream.getbuffer().nbytes}")
+        # Configurar o cliente de Speech-to-Text do Google Cloud
+        client = speech.SpeechClient()
 
-        # Realizar a transcrição com Whisper
-        transcript = openai.Audio.transcribe("whisper-1", audio_stream, timeout=30)
+        # Configurar a requisição de reconhecimento de áudio
+        audio = speech.RecognitionAudio(content=audio_content)
+        config = speech.RecognitionConfig(
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+            sample_rate_hertz=16000,
+            language_code="pt-BR"
+        )
 
-        return jsonify({"transcricao": transcript['text']})
+        # Realizar a transcrição
+        response = client.recognize(config=config, audio=audio)
 
-    except OpenAIError as e:
-        print(f"Erro na API OpenAI: {str(e)}")
-        return jsonify({"error": f"Erro na API: {str(e)}"}), 500
+        # Extrair o texto transcrito
+        transcript = " ".join([result.alternatives[0].transcript for result in response.results])
+
+        return jsonify({"transcricao": transcript})
 
     except Exception as e:
         print(f"Erro inesperado: {str(e)}")
