@@ -6,8 +6,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pydub import AudioSegment
 from google.cloud import speech_v1p1beta1 as speech
-import openai
-from openai.error import OpenAIError
+import openai  # Correção: Não há necessidade de importar openai.error separadamente
 from dotenv import load_dotenv
 
 # Carregar variáveis de ambiente do arquivo .env
@@ -135,7 +134,7 @@ def anamnese_texto():
             "tratamentos": tratamentos
         })
 
-    except OpenAIError as e:
+    except openai.error.OpenAIError as e:
         print(f"Erro na API OpenAI: {str(e)}")
         return jsonify({"error": f"Erro na API: {str(e)}"}), 500
 
