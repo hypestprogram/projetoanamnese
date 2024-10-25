@@ -7,9 +7,6 @@ import io
 from pydub import AudioSegment
 from openai.error import OpenAIError
 
-# Configurar caminho do ffmpeg
-AudioSegment.converter = "/usr/bin/ffmpeg"
-
 # Carregar variáveis de ambiente
 load_dotenv()
 
@@ -18,9 +15,11 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+# Formatos suportados
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
 
 def convert_audio(audio_bytes, target_format='wav'):
+    """Converte áudio para o formato especificado (WAV ou WebM)."""
     try:
         audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
         audio_io = io.BytesIO()
@@ -55,14 +54,68 @@ def transcrever_audio():
                          f"Formatos suportados: {SUPPORTED_FORMATS}"
             }), 400
 
+        # Converter qualquer formato para WAV para evitar problemas de compatibilidade
         audio_stream = convert_audio(audio_bytes, target_format='wav')
         audio_stream.name = audio_file.filename or 'audio.wav'
 
-        transcript = openai.Audio.transcribe("whisper-1", audio_stream, timeout=60)
+        # Realizar a transcrição com Whisper
+        transcript = openai.Audio.transcribe("whisper-1", audio_stream, timeout=30)
 
         return jsonify({"transcricao": transcript['text']})
 
     except OpenAIError as e:
+        print(f"Erro na API OpenAI: {str(e)}")
+        return jsonify({"error": f"Erro na API: {str(e)}"}), 500
+
+    except Exception as e:
+        print(f"Erro inesperado: {str(e)}")
+        return jsonify({"error": f"Erro inesperado: {str(e)}"}), 500
+
+@app.route('/anamnese', methods=['POST'])
+def anamnese_texto():
+    data = request.get_json()
+    texto = data.get('texto', '')
+
+    if not texto:
+        return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
+
+    try:
+        resumo_response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Resuma o seguinte texto:"},
+                {"role": "user", "content": texto}
+            ],
+            max_tokens=150
+        )
+        topicos_response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Liste os tópicos principais do texto:"},
+                {"role": "user", "content": texto}
+            ],
+            max_tokens=100
+        )
+        tratamentos_response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Liste exames ou medicamentos apropriados:"},
+                {"role": "user", "content": texto}
+            ],
+            max_tokens=100
+        )
+
+        resumo = resumo_response['choices'][0]['message']['content'].strip()
+        topicos = topicos_response['choices'][0]['message']['content'].strip()
+        tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
+
+        return jsonify({
+            "resumo": resumo,
+            "topicos": topicos,
+            "tratamentos": tratamentos
+        })
+
+    except openai.error.OpenAIError as e:
         print(f"Erro na API OpenAI: {str(e)}")
         return jsonify({"error": f"Erro na API: {str(e)}"}), 500
 
