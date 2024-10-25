@@ -15,11 +15,11 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Formatos suportados
+# Formatos de áudio suportados
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
 
 def convert_audio(audio_bytes, target_format='wav'):
-    """Converte áudio para o formato especificado (WAV ou WebM)."""
+    """Converte áudio recebido para o formato especificado."""
     try:
         audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
         audio_io = io.BytesIO()
@@ -54,13 +54,12 @@ def transcrever_audio():
                          f"Formatos suportados: {SUPPORTED_FORMATS}"
             }), 400
 
-        # Converter qualquer formato para WAV para evitar problemas de compatibilidade
+        # Converter áudio para WAV, se necessário, para compatibilidade com a API da OpenAI
         audio_stream = convert_audio(audio_bytes, target_format='wav')
         audio_stream.name = audio_file.filename or 'audio.wav'
 
-        # Realizar a transcrição com Whisper
+        # Enviar para transcrição com Whisper
         transcript = openai.Audio.transcribe("whisper-1", audio_stream, timeout=30)
-
         return jsonify({"transcricao": transcript['text']})
 
     except OpenAIError as e:
