@@ -6,9 +6,11 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pydub import AudioSegment
 from google.cloud import speech_v1p1beta1 as speech
+import openai
 
 # Carregar variáveis de ambiente e configurar as credenciais do Google Cloud
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Escreve o JSON de credenciais em um arquivo temporário
 if GOOGLE_CREDENTIALS_JSON:
@@ -21,6 +23,9 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/credentials.json"
 # Inicializar o app Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Inicializar a API da OpenAI
+openai.api_key = OPENAI_API_KEY
 
 # Formatos suportados
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
@@ -93,60 +98,25 @@ def transcrever_audio():
 
         # Extrair o texto transcrito
         transcript = " ".join([result.alternatives[0].transcript for result in response.results])
+        print(f"Texto transcrito: {transcript}")
 
-        return jsonify({"transcricao": transcript})
-
-    except Exception as e:
-        print(f"Erro inesperado: {str(e)}")
-        return jsonify({"error": f"Erro inesperado: {str(e)}"}), 500
-
-@app.route('/anamnese', methods=['POST'])
-def anamnese_texto():
-    data = request.get_json()
-    texto = data.get('texto', '')
-
-    if not texto:
-        return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
-
-    try:
-        resumo_response = openai.ChatCompletion.create(
+        # Enviar o texto transcrito para a API da OpenAI
+        openai_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Resuma o seguinte texto:"},
-                {"role": "user", "content": texto}
+                {"role": "system", "content": "Você é um assistente que ajuda a processar transcrições."},
+                {"role": "user", "content": transcript}
             ],
             max_tokens=150
         )
-        topicos_response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Liste os tópicos principais do texto:"},
-                {"role": "user", "content": texto}
-            ],
-            max_tokens=100
-        )
-        tratamentos_response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Liste exames ou medicamentos apropriados:"},
-                {"role": "user", "content": texto}
-            ],
-            max_tokens=100
-        )
 
-        resumo = resumo_response['choices'][0]['message']['content'].strip()
-        topicos = topicos_response['choices'][0]['message']['content'].strip()
-        tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
+        # Extrair a resposta da OpenAI
+        processed_text = openai_response['choices'][0]['message']['content'].strip()
 
         return jsonify({
-            "resumo": resumo,
-            "topicos": topicos,
-            "tratamentos": tratamentos
+            "transcricao": transcript,
+            "processado": processed_text
         })
-
-    except openai.error.OpenAIError as e:
-        print(f"Erro na API OpenAI: {str(e)}")
-        return jsonify({"error": f"Erro na API: {str(e)}"}), 500
 
     except Exception as e:
         print(f"Erro inesperado: {str(e)}")
