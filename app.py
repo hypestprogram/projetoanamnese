@@ -54,16 +54,13 @@ def transcrever_audio():
                          f"Formatos suportados: {SUPPORTED_FORMATS}"
             }), 400
 
-        # Converter MP4 para WAV ou WebM
-        if mime_type == 'audio/mp4':
-            audio_stream = convert_audio(audio_bytes, target_format='wav')
-        else:
-            audio_stream = io.BytesIO(audio_bytes)
-
+        # Converter qualquer formato para WAV para evitar problemas de compatibilidade
+        audio_stream = convert_audio(audio_bytes, target_format='wav')
         audio_stream.name = audio_file.filename or 'audio.wav'
 
         # Realizar a transcrição com Whisper
         transcript = openai.Audio.transcribe("whisper-1", audio_stream, timeout=30)
+
         return jsonify({"transcricao": transcript['text']})
 
     except OpenAIError as e:
@@ -85,17 +82,26 @@ def anamnese_texto():
     try:
         resumo_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Resuma o seguinte texto:"}, {"role": "user", "content": texto}],
+            messages=[
+                {"role": "system", "content": "Resuma o seguinte texto:"},
+                {"role": "user", "content": texto}
+            ],
             max_tokens=150
         )
         topicos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Liste os tópicos principais do texto:"}, {"role": "user", "content": texto}],
+            messages=[
+                {"role": "system", "content": "Liste os tópicos principais do texto:"},
+                {"role": "user", "content": texto}
+            ],
             max_tokens=100
         )
         tratamentos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Liste exames ou medicamentos apropriados:"}, {"role": "user", "content": texto}],
+            messages=[
+                {"role": "system", "content": "Liste exames ou medicamentos apropriados:"},
+                {"role": "user", "content": texto}
+            ],
             max_tokens=100
         )
 
@@ -103,7 +109,11 @@ def anamnese_texto():
         topicos = topicos_response['choices'][0]['message']['content'].strip()
         tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
 
-        return jsonify({"resumo": resumo, "topicos": topicos, "tratamentos": tratamentos})
+        return jsonify({
+            "resumo": resumo,
+            "topicos": topicos,
+            "tratamentos": tratamentos
+        })
 
     except Exception as e:
         print(f"Erro na anamnese: {str(e)}")
