@@ -115,12 +115,31 @@ def anamnese_texto():
         )
         topicos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Liste os tópicos principais do texto:"}, {"role": "user", "content": texto}],
+            messages=[{"role": "system", "content": "Organize e resuma o seguinte texto, focando nas seções principais da anamnese:"
+                "\n- Identificação do paciente"
+                "\n- Queixa principal e duração dos sintomas"
+                "\n- História da doença atual"
+                "\n- Histórico médico, cirúrgico e medicamentoso"
+                "\n- Histórico familiar e social"
+                "\n- Exame físico"
+                "\n- Hipóteses diagnósticas e plano terapêutico"
+                "\n- Queixa principal"
+                "\n- Evolução dos sintomas"
+                "\n- Fatores agravantes e de alívio"
+                "\n- Histórico médico e familiar"
+                "\n- Achados do exame físico"
+                "\n- Hipóteses diagnósticas e plano terapêutico"}, {"role": "user", "content": texto}],
             max_tokens=100
         )
         tratamentos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Liste exames ou medicamentos apropriados:"}, {"role": "user", "content": texto}],
+            messages=[{"role": "system", "content": "Com base nas informações fornecidas, sugira um plano diagnóstico e terapêutico adequado para o paciente. "
+                "Inclua as seguintes seções:"
+                "\n- Hipóteses Diagnósticas: Liste possíveis diagnósticos diferenciais."
+                "\n- Exames Complementares Solicitados: Informe quais exames são necessários."
+                "\n- Medicações Prescritas: Liste as medicações recomendadas."
+                "\n- Orientações ao Paciente: Descreva orientações e recomendações ao paciente."
+                "\n- Seguimento e Reavaliação: Informe sobre o plano de seguimento e necessidade de reavaliações futuras."}, {"role": "user", "content": texto}],
             max_tokens=100
         )
 
