@@ -2,6 +2,7 @@ import os
 import io
 import json
 import subprocess
+import asyncio
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pydub import AudioSegment
@@ -37,6 +38,10 @@ def verificar_ffmpeg():
 
 verificar_ffmpeg()
 
+async def convert_audio_async(audio_bytes, target_format='wav'):
+    """Converte áudio para WAV e ajusta para 16-bit PCM de forma assíncrona."""
+    return await asyncio.to_thread(convert_audio, audio_bytes, target_format)
+
 def convert_audio(audio_bytes, target_format='wav'):
     """Converte áudio para WAV e ajusta para 16-bit PCM."""
     try:
@@ -59,7 +64,7 @@ def health_check():
     return jsonify({"status": "API ativa e funcionando"}), 200
 
 @app.route('/transcrever', methods=['POST'])
-def transcrever_audio():
+async def transcrever_audio():
     if 'audio' not in request.files:
         return jsonify({"error": "Nenhum arquivo de áudio enviado"}), 400
 
@@ -77,8 +82,8 @@ def transcrever_audio():
                 "error": f"Formato não suportado: {mime_type}. Formatos suportados: {SUPPORTED_FORMATS}"
             }), 400
 
-        # Converter áudio e detectar taxa de amostragem
-        audio_stream, sample_rate = convert_audio(audio_bytes)
+        # Conversão de áudio de forma assíncrona
+        audio_stream, sample_rate = await convert_audio_async(audio_bytes)
 
         # Configurar o cliente do Google Speech-to-Text
         client = speech.SpeechClient()
