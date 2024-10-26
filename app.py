@@ -8,10 +8,10 @@ from google.cloud import speech_v1p1beta1 as speech
 import openai
 from dotenv import load_dotenv
 
-# Carregar variáveis de ambiente do .env
+# Carregar variáveis de ambiente
 load_dotenv()
 
-# Configurar as chaves de API
+# Configurar API keys
 openai.api_key = os.getenv("OPENAI_API_KEY")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
@@ -25,13 +25,15 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/credentials.json"
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
+SUPPORTED_FORMATS = [
+    'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/x-wav'
+]
 
 def verificar_ffmpeg():
-    """Verifica se o FFmpeg está instalado."""
+    """Verifica se o FFmpeg está instalado e disponível."""
     try:
         result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True, check=True)
-        print(f"FFmpeg Version: {result.stdout}")
+        print(f"Versão do FFmpeg: {result.stdout}")
     except subprocess.CalledProcessError as e:
         print(f"Erro ao verificar FFmpeg: {e.stderr}")
 
@@ -41,14 +43,14 @@ def convert_audio(audio_bytes, target_format='wav'):
     """Converte áudio para WAV e ajusta para 16-bit PCM."""
     try:
         audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
-        audio = audio.set_sample_width(2)  # 16 bits por amostra
+        audio = audio.set_sample_width(2)  # 2 bytes = 16 bits por amostra
         sample_rate = audio.frame_rate
 
         audio_io = io.BytesIO()
         audio.export(audio_io, format=target_format)
         audio_io.seek(0)
 
-        print(f"Áudio convertido para {target_format} com taxa de {sample_rate} Hz")
+        print(f"Áudio convertido para: {target_format} com taxa de {sample_rate} Hz")
         return audio_io, sample_rate
     except Exception as e:
         print(f"Erro na conversão de áudio: {str(e)}")
@@ -73,7 +75,9 @@ def transcrever_audio():
         print(f"Tipo de arquivo recebido: {mime_type}")
 
         if mime_type not in SUPPORTED_FORMATS:
-            return jsonify({"error": f"Formato não suportado: {mime_type}"}), 400
+            return jsonify({
+                "error": f"Formato não suportado: {mime_type}. Formatos suportados: {SUPPORTED_FORMATS}"
+            }), 400
 
         audio_stream, sample_rate = convert_audio(audio_bytes)
 
@@ -124,9 +128,13 @@ def anamnese_texto():
         )
         tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
 
-        return jsonify({"resumo": resumo, "topicos": topicos, "tratamentos": tratamentos})
+        return jsonify({
+            "resumo": resumo,
+            "topicos": topicos,
+            "tratamentos": tratamentos
+        })
 
-    except openai.error.OpenAIError as e:
+    except openai.OpenAIError as e:
         print(f"Erro na API OpenAI: {str(e)}")
         return jsonify({"error": f"Erro na API OpenAI: {str(e)}"}), 500
 
