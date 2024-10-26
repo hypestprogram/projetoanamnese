@@ -8,10 +8,10 @@ from google.cloud import speech_v1p1beta1 as speech
 import openai
 from dotenv import load_dotenv
 
-# Carregar variáveis de ambiente do arquivo .env
+# Carregar variáveis de ambiente
 load_dotenv()
 
-# Configurar as chaves de API
+# Configurar chaves de API
 openai.api_key = os.getenv("OPENAI_API_KEY")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
@@ -20,20 +20,20 @@ if GOOGLE_CREDENTIALS_JSON:
         f.write(GOOGLE_CREDENTIALS_JSON)
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/credentials.json"
 
-# Inicializar o app Flask com CORS
+# Inicializar Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
 
 def verificar_ffmpeg():
-    """Verifica se o FFmpeg está instalado e disponível."""
+    """Verifica se FFmpeg está disponível."""
     try:
         result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True, check=True)
-        print(f"Versão do FFmpeg detectada:\n{result.stdout}")
+        print(f"FFmpeg detectado:\n{result.stdout}")
     except subprocess.CalledProcessError as e:
-        print(f"Erro ao verificar FFmpeg: {e.stderr}")
-        raise RuntimeError("FFmpeg não está instalado ou disponível no PATH.")
+        print(f"Erro com FFmpeg: {e.stderr}")
+        raise RuntimeError("FFmpeg não disponível no PATH.")
 
 verificar_ffmpeg()
 
@@ -46,35 +46,32 @@ def anamnese_texto():
         return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
 
     try:
-        # Nova API de chat do OpenAI
-        completion = openai.ChatCompletion.create(
+        # Solicitar resumo
+        resumo = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Resuma o seguinte texto:"},
                 {"role": "user", "content": texto}
             ]
-        )
-        resumo = completion.choices[0].message["content"].strip()
+        )['choices'][0]['message']['content'].strip()
 
-        # Gerar tópicos
-        completion = openai.ChatCompletion.create(
+        # Solicitar tópicos
+        topicos = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Liste os tópicos principais do texto:"},
                 {"role": "user", "content": texto}
             ]
-        )
-        topicos = completion.choices[0].message["content"].strip()
+        )['choices'][0]['message']['content'].strip()
 
-        # Gerar tratamentos sugeridos
-        completion = openai.ChatCompletion.create(
+        # Solicitar tratamentos
+        tratamentos = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Liste exames ou medicamentos apropriados:"},
                 {"role": "user", "content": texto}
             ]
-        )
-        tratamentos = completion.choices[0].message["content"].strip()
+        )['choices'][0]['message']['content'].strip()
 
         return jsonify({
             "resumo": resumo,
@@ -82,7 +79,7 @@ def anamnese_texto():
             "tratamentos": tratamentos
         })
 
-    except openai.OpenAIError as e:
+    except openai.error.OpenAIError as e:
         print(f"Erro na API OpenAI: {str(e)}")
         return jsonify({"error": f"Erro na API: {str(e)}"}), 500
 
