@@ -123,7 +123,7 @@ def anamnese_texto():
         )
         topicos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Liste os principais tópicos identificados na anamnese em no maximo 150 tokens , incluindo:"
+            messages=[{"role": "system", "content": "Liste os principais tópicos identificados na anamnese em no maximo 150 tokens , incluindo se houver:"
                 "\n- Queixa principal"
                 "\n- Evolução dos sintomas"
                 "\n- Fatores agravantes e de alívio"
