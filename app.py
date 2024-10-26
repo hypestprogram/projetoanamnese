@@ -110,11 +110,6 @@ def anamnese_texto():
     try:
         resumo_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Resuma o seguinte texto:"}, {"role": "user", "content": texto}],
-            max_tokens=150
-        )
-        topicos_response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
             messages=[{"role": "system", "content": "Organize e resuma o seguinte texto, focando nas seções principais da anamnese:"
                 "\n- Identificação do paciente"
                 "\n- Queixa principal e duração dos sintomas"
@@ -123,6 +118,17 @@ def anamnese_texto():
                 "\n- Histórico familiar e social"
                 "\n- Exame físico"
                 "\n- Hipóteses diagnósticas e plano terapêutico"
+                "\n- Queixa principal"
+                "\n- Evolução dos sintomas"
+                "\n- Fatores agravantes e de alívio"
+                "\n- Histórico médico e familiar"
+                "\n- Achados do exame físico"
+                "\n- Hipóteses diagnósticas e plano terapêutico"}, {"role": "user", "content": texto}],
+            max_tokens=150
+        )
+        topicos_response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "system", "content": "Liste os principais tópicos identificados na anamnese, incluindo:"
                 "\n- Queixa principal"
                 "\n- Evolução dos sintomas"
                 "\n- Fatores agravantes e de alívio"
