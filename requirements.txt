@@ -1,4 +1,4 @@
-Flask>=2.2.0
+Flask>=3.0.3
 flask-cors>=5.0.0
 openai>=1.52.2
 python-dotenv>=1.0.1
