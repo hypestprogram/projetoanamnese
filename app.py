@@ -1,11 +1,12 @@
 import os
 import io
+import json
 import subprocess
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pydub import AudioSegment
 from google.cloud import speech_v1p1beta1 as speech
-import openai
+import openai  # Correção: Não há necessidade de importar openai.error separadamente
 from dotenv import load_dotenv
 
 # Carregar variáveis de ambiente do arquivo .env
@@ -15,7 +16,6 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
-# Configurar credenciais do Google
 if GOOGLE_CREDENTIALS_JSON:
     with open("/tmp/credentials.json", "w") as f:
         f.write(GOOGLE_CREDENTIALS_JSON)
@@ -108,35 +108,24 @@ def anamnese_texto():
         return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
 
     try:
-        # Nova chamada da API usando a interface atualizada
-        response = openai.ChatCompletion.create(
+        resumo_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Resuma o seguinte texto:"},
-                {"role": "user", "content": texto}
-            ],
+            messages=[{"role": "system", "content": "Resuma o seguinte texto:"}, {"role": "user", "content": texto}],
             max_tokens=150
         )
-        resumo = response['choices'][0]['message']['content'].strip()
-
         topicos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Liste os tópicos principais do texto:"},
-                {"role": "user", "content": texto}
-            ],
+            messages=[{"role": "system", "content": "Liste os tópicos principais do texto:"}, {"role": "user", "content": texto}],
             max_tokens=100
         )
-        topicos = topicos_response['choices'][0]['message']['content'].strip()
-
         tratamentos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Liste exames ou medicamentos apropriados:"},
-                {"role": "user", "content": texto}
-            ],
+            messages=[{"role": "system", "content": "Liste exames ou medicamentos apropriados:"}, {"role": "user", "content": texto}],
             max_tokens=100
         )
+
+        resumo = resumo_response['choices'][0]['message']['content'].strip()
+        topicos = topicos_response['choices'][0]['message']['content'].strip()
         tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
 
         return jsonify({
