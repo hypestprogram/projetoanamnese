@@ -1,6 +1,5 @@
 import os
 import io
-import json
 import subprocess
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -8,6 +7,7 @@ from pydub import AudioSegment
 from google.cloud import speech_v1p1beta1 as speech
 import openai
 from dotenv import load_dotenv
+from google.api_core.exceptions import GoogleAPIError
 
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
@@ -16,15 +16,20 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
+# Configurar credenciais do Google
 if GOOGLE_CREDENTIALS_JSON:
-    with open("/tmp/credentials.json", "w") as f:
-        f.write(GOOGLE_CREDENTIALS_JSON)
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/credentials.json"
+    try:
+        with open("/tmp/credentials.json", "w") as f:
+            f.write(GOOGLE_CREDENTIALS_JSON)
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/credentials.json"
+    except Exception as e:
+        print(f"Erro ao configurar credenciais do Google: {str(e)}")
 
 # Inicializar o app Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+# Formatos de áudio suportados
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
 
 def verificar_ffmpeg():
@@ -77,8 +82,10 @@ def transcrever_audio():
                 "error": f"Formato não suportado: {mime_type}. Formatos suportados: {SUPPORTED_FORMATS}"
             }), 400
 
+        # Converter áudio e detectar taxa de amostragem
         audio_stream, sample_rate = convert_audio(audio_bytes)
 
+        # Configurar o cliente do Google Speech-to-Text
         client = speech.SpeechClient()
         audio = speech.RecognitionAudio(content=audio_stream.read())
         config = speech.RecognitionConfig(
@@ -87,13 +94,17 @@ def transcrever_audio():
             language_code="pt-BR"
         )
 
+        # Realizar a transcrição
         response = client.recognize(config=config, audio=audio)
         transcript = " ".join([result.alternatives[0].transcript for result in response.results])
 
         return jsonify({"transcricao": transcript})
 
+    except GoogleAPIError as e:
+        print(f"Erro na API Google Speech: {str(e)}")
+        return jsonify({"error": f"Erro na API Google Speech: {str(e)}"}), 500
     except Exception as e:
-        print(f"Erro na transcrição: {str(e)}")
+        print(f"Erro inesperado: {str(e)}")
         return jsonify({"error": f"Erro inesperado: {str(e)}"}), 500
 
 @app.route('/anamnese', methods=['POST'])
@@ -108,7 +119,7 @@ def anamnese_texto():
         resumo_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "system", "content": "Resuma o seguinte texto:"}, {"role": "user", "content": texto}],
-            max_tokens=150
+            max_tokens=300  # Aumentado para respostas mais completas
         )
         topicos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -131,9 +142,9 @@ def anamnese_texto():
             "tratamentos": tratamentos
         })
 
-    except openai.error.APIError as e:
+    except openai.OpenAIError as e:
         print(f"Erro na API OpenAI: {str(e)}")
-        return jsonify({"error": f"Erro na API: {str(e)}"}), 500
+        return jsonify({"error": f"Erro na API OpenAI: {str(e)}"}), 500
 
     except Exception as e:
         print(f"Erro inesperado: {str(e)}")
