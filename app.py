@@ -15,15 +15,14 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
-# Configurar credenciais do Google
 if GOOGLE_CREDENTIALS_JSON:
     with open("/tmp/credentials.json", "w") as f:
         f.write(GOOGLE_CREDENTIALS_JSON)
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/credentials.json"
 
-# Inicializar o app Flask
+# Inicializar o app Flask com CORS
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
 
@@ -31,73 +30,12 @@ def verificar_ffmpeg():
     """Verifica se o FFmpeg está instalado e disponível."""
     try:
         result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True, check=True)
-        print(f"Versão do FFmpeg: {result.stdout}")
+        print(f"Versão do FFmpeg detectada:\n{result.stdout}")
     except subprocess.CalledProcessError as e:
         print(f"Erro ao verificar FFmpeg: {e.stderr}")
+        raise RuntimeError("FFmpeg não está instalado ou disponível no PATH.")
 
 verificar_ffmpeg()
-
-def convert_audio(audio_bytes, target_format='wav'):
-    """Converte áudio para WAV e ajusta para 16-bit PCM."""
-    try:
-        audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
-        audio = audio.set_sample_width(2)  # 2 bytes = 16 bits por amostra
-        sample_rate = audio.frame_rate
-
-        audio_io = io.BytesIO()
-        audio.export(audio_io, format=target_format)
-        audio_io.seek(0)
-
-        print(f"Áudio convertido para: {target_format} com taxa de {sample_rate} Hz")
-        return audio_io, sample_rate
-    except Exception as e:
-        print(f"Erro na conversão de áudio: {str(e)}")
-        raise
-
-@app.route('/', methods=['GET'])
-def health_check():
-    return jsonify({"status": "API ativa e funcionando"}), 200
-
-@app.route('/transcrever', methods=['POST'])
-def transcrever_audio():
-    if 'audio' not in request.files:
-        return jsonify({"error": "Nenhum arquivo de áudio enviado"}), 400
-
-    audio_file = request.files['audio']
-    try:
-        audio_bytes = audio_file.read()
-        if len(audio_bytes) == 0:
-            return jsonify({"error": "Arquivo de áudio vazio ou inválido."}), 400
-
-        mime_type = audio_file.mimetype
-        print(f"Tipo de arquivo recebido: {mime_type}")
-
-        if mime_type not in SUPPORTED_FORMATS:
-            return jsonify({
-                "error": f"Formato não suportado: {mime_type}. Formatos suportados: {SUPPORTED_FORMATS}"
-            }), 400
-
-        # Converter áudio e detectar taxa de amostragem
-        audio_stream, sample_rate = convert_audio(audio_bytes)
-
-        # Configurar o cliente do Google Speech-to-Text
-        client = speech.SpeechClient()
-        audio = speech.RecognitionAudio(content=audio_stream.read())
-        config = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=sample_rate,
-            language_code="pt-BR"
-        )
-
-        # Realizar a transcrição
-        response = client.recognize(config=config, audio=audio)
-        transcript = " ".join([result.alternatives[0].transcript for result in response.results])
-
-        return jsonify({"transcricao": transcript})
-
-    except Exception as e:
-        print(f"Erro na transcrição: {str(e)}")
-        return jsonify({"error": f"Erro inesperado: {str(e)}"}), 500
 
 @app.route('/anamnese', methods=['POST'])
 def anamnese_texto():
@@ -108,35 +46,45 @@ def anamnese_texto():
         return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
 
     try:
-        # Chamada para resumir o texto
-        resumo_response = openai.ChatCompletion.create(
+        # Nova API de chat do OpenAI
+        completion = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Resuma o seguinte texto:"}, {"role": "user", "content": texto}],
-            max_tokens=150
+            messages=[
+                {"role": "system", "content": "Resuma o seguinte texto:"},
+                {"role": "user", "content": texto}
+            ]
         )
-        resumo = resumo_response['choices'][0]['message']['content'].strip()
+        resumo = completion.choices[0].message["content"].strip()
 
-        # Chamada para listar tópicos principais
-        topicos_response = openai.ChatCompletion.create(
+        # Gerar tópicos
+        completion = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Liste os tópicos principais do texto:"}, {"role": "user", "content": texto}],
-            max_tokens=100
+            messages=[
+                {"role": "system", "content": "Liste os tópicos principais do texto:"},
+                {"role": "user", "content": texto}
+            ]
         )
-        topicos = topicos_response['choices'][0]['message']['content'].strip()
+        topicos = completion.choices[0].message["content"].strip()
 
-        # Chamada para listar exames e medicamentos
-        tratamentos_response = openai.ChatCompletion.create(
+        # Gerar tratamentos sugeridos
+        completion = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Liste exames ou medicamentos apropriados:"}, {"role": "user", "content": texto}],
-            max_tokens=100
+            messages=[
+                {"role": "system", "content": "Liste exames ou medicamentos apropriados:"},
+                {"role": "user", "content": texto}
+            ]
         )
-        tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
+        tratamentos = completion.choices[0].message["content"].strip()
 
         return jsonify({
             "resumo": resumo,
             "topicos": topicos,
             "tratamentos": tratamentos
         })
+
+    except openai.OpenAIError as e:
+        print(f"Erro na API OpenAI: {str(e)}")
+        return jsonify({"error": f"Erro na API: {str(e)}"}), 500
 
     except Exception as e:
         print(f"Erro inesperado: {str(e)}")
