@@ -111,7 +111,7 @@ def anamnese_texto():
         # Chamada para resumir o texto
         resumo_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": f"Resuma o seguinte texto: {texto}"}],
+            messages=[{"role": "system", "content": "Resuma o seguinte texto:"}, {"role": "user", "content": texto}],
             max_tokens=150
         )
         resumo = resumo_response['choices'][0]['message']['content'].strip()
@@ -119,7 +119,7 @@ def anamnese_texto():
         # Chamada para listar tópicos principais
         topicos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": f"Liste os tópicos principais: {texto}"}],
+            messages=[{"role": "system", "content": "Liste os tópicos principais do texto:"}, {"role": "user", "content": texto}],
             max_tokens=100
         )
         topicos = topicos_response['choices'][0]['message']['content'].strip()
@@ -127,7 +127,7 @@ def anamnese_texto():
         # Chamada para listar exames e medicamentos
         tratamentos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": f"Liste exames ou medicamentos apropriados: {texto}"}],
+            messages=[{"role": "system", "content": "Liste exames ou medicamentos apropriados:"}, {"role": "user", "content": texto}],
             max_tokens=100
         )
         tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
@@ -137,10 +137,6 @@ def anamnese_texto():
             "topicos": topicos,
             "tratamentos": tratamentos
         })
-
-    except openai.error.OpenAIError as e:
-        print(f"Erro na API OpenAI: {str(e)}")
-        return jsonify({"error": f"Erro na API OpenAI: {str(e)}"}), 500
 
     except Exception as e:
         print(f"Erro inesperado: {str(e)}")
