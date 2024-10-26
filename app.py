@@ -110,20 +110,15 @@ def anamnese_texto():
     try:
         resumo_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Organize e resuma o seguinte texto em no maximo 150 tokens , focando nas seções principais da anamnese:"
-                "\n- Identificação do paciente"
-                "\n- Queixa principal e duração dos sintomas"
-                "\n- História da doença atual"
-                "\n- Histórico médico, cirúrgico e medicamentoso"
-                "\n- Histórico familiar e social"
-                "\n- Exame físico"
-                "\n- Hipóteses diagnósticas e plano terapêutico"
-                "\n- Queixa principal"
-                "\n- Evolução dos sintomas"
-                "\n- Fatores agravantes e de alívio"
-                "\n- Histórico médico e familiar"
-                "\n- Achados do exame físico"
-                "\n- Hipóteses diagnósticas e plano terapêutico"}, {"role": "user", "content": texto}],
+            messages=[{"role": "system", "content": "Organize e resuma o seguinte texto em no máximo 150 tokens, "
+                "focando nas principais seções da anamnese:"
+                "\n1. Identificação do paciente (iniciais, idade, sexo)"
+                "\n2. Queixa principal e duração dos sintomas"
+                "\n3. História da doença atual (início, evolução, fatores agravantes ou de alívio, sintomas associados)"
+                "\n4. Histórico médico, cirúrgico e medicamentoso"
+                "\n5. Histórico familiar e social (doenças hereditárias, hábitos de vida)"
+                "\n6. Exame físico (sinais vitais e achados relevantes)"
+                "\n7. Hipóteses diagnósticas e plano terapêutico" }, {"role": "user", "content": texto}],
             max_tokens=150
         )
         topicos_response = openai.ChatCompletion.create(
