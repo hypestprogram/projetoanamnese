@@ -10,4 +10,3 @@ google-auth>=2.21.0
 Werkzeug>=2.2.0
 httpx>=0.27.2
 google-api-core>=2.21.0
-google-api-python-client>=2.91.0
