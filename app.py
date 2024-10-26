@@ -1,12 +1,12 @@
 import os
 import io
+import json
 import subprocess
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pydub import AudioSegment
 from google.cloud import speech_v1p1beta1 as speech
-import openai
-from openai.error import APIError, InvalidRequestError
+import openai  # Correção: Não há necessidade de importar openai.error separadamente
 from dotenv import load_dotenv
 
 # Carregar variáveis de ambiente do arquivo .env
@@ -16,7 +16,6 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
-# Configurar credenciais do Google
 if GOOGLE_CREDENTIALS_JSON:
     with open("/tmp/credentials.json", "w") as f:
         f.write(GOOGLE_CREDENTIALS_JSON)
@@ -106,31 +105,27 @@ def anamnese_texto():
     texto = data.get('texto', '')
 
     if not texto:
-        return jsonify({"error": "Texto de anamnese não enviado"}), 400
+        return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
 
     try:
-        # Chamada para resumir o texto
         resumo_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": f"Resuma o seguinte texto: {texto}"}],
+            messages=[{"role": "system", "content": "Resuma o seguinte texto:"}, {"role": "user", "content": texto}],
             max_tokens=150
         )
-        resumo = resumo_response['choices'][0]['message']['content'].strip()
-
-        # Chamada para listar tópicos principais
         topicos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": f"Liste os tópicos principais: {texto}"}],
+            messages=[{"role": "system", "content": "Liste os tópicos principais do texto:"}, {"role": "user", "content": texto}],
             max_tokens=100
         )
-        topicos = topicos_response['choices'][0]['message']['content'].strip()
-
-        # Chamada para listar exames e medicamentos
         tratamentos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": f"Liste exames ou medicamentos apropriados: {texto}"}],
+            messages=[{"role": "system", "content": "Liste exames ou medicamentos apropriados:"}, {"role": "user", "content": texto}],
             max_tokens=100
         )
+
+        resumo = resumo_response['choices'][0]['message']['content'].strip()
+        topicos = topicos_response['choices'][0]['message']['content'].strip()
         tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
 
         return jsonify({
@@ -139,9 +134,9 @@ def anamnese_texto():
             "tratamentos": tratamentos
         })
 
-    except (APIError, InvalidRequestError) as e:
+    except openai.error.OpenAIError as e:
         print(f"Erro na API OpenAI: {str(e)}")
-        return jsonify({"error": f"Erro na API OpenAI: {str(e)}"}), 500
+        return jsonify({"error": f"Erro na API: {str(e)}"}), 500
 
     except Exception as e:
         print(f"Erro inesperado: {str(e)}")
