@@ -23,7 +23,7 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/credentials.json"
 
 # Inicializar o app Flask
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app)
 
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
 
@@ -31,10 +31,9 @@ def verificar_ffmpeg():
     """Verifica se o FFmpeg está instalado e disponível."""
     try:
         result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True, check=True)
-        print(f"Versão do FFmpeg: {result.stdout.splitlines()[0]}")
+        print(f"Versão do FFmpeg: {result.stdout}")
     except subprocess.CalledProcessError as e:
         print(f"Erro ao verificar FFmpeg: {e.stderr}")
-        raise RuntimeError("FFmpeg não está disponível. Verifique a instalação.")
 
 verificar_ffmpeg()
 
@@ -43,11 +42,14 @@ def convert_audio(audio_bytes, target_format='wav'):
     try:
         audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
         audio = audio.set_sample_width(2)  # 2 bytes = 16 bits por amostra
+        sample_rate = audio.frame_rate
+
         audio_io = io.BytesIO()
         audio.export(audio_io, format=target_format)
         audio_io.seek(0)
-        print(f"Áudio convertido para {target_format} com taxa {audio.frame_rate} Hz")
-        return audio_io, audio.frame_rate
+
+        print(f"Áudio convertido para: {target_format} com taxa de {sample_rate} Hz")
+        return audio_io, sample_rate
     except Exception as e:
         print(f"Erro na conversão de áudio: {str(e)}")
         raise
@@ -103,10 +105,10 @@ def anamnese_texto():
     texto = data.get('texto', '')
 
     if not texto:
-        return jsonify({"error": "Texto de anamnese não enviado"}), 400
+        return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
 
     try:
-        # Resumir texto
+        # Chamada para resumir o texto
         resumo_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": f"Resuma o seguinte texto: {texto}"}],
@@ -114,7 +116,7 @@ def anamnese_texto():
         )
         resumo = resumo_response['choices'][0]['message']['content'].strip()
 
-        # Listar tópicos principais
+        # Chamada para listar tópicos principais
         topicos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": f"Liste os tópicos principais: {texto}"}],
@@ -122,7 +124,7 @@ def anamnese_texto():
         )
         topicos = topicos_response['choices'][0]['message']['content'].strip()
 
-        # Listar exames e medicamentos
+        # Chamada para listar exames e medicamentos
         tratamentos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": f"Liste exames ou medicamentos apropriados: {texto}"}],
@@ -136,7 +138,7 @@ def anamnese_texto():
             "tratamentos": tratamentos
         })
 
-    except (APIError, InvalidRequestError) as e:
+    except openai.error.OpenAIError as e:
         print(f"Erro na API OpenAI: {str(e)}")
         return jsonify({"error": f"Erro na API OpenAI: {str(e)}"}), 500
 
