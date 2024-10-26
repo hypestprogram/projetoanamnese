@@ -7,7 +7,6 @@ from pydub import AudioSegment
 from google.cloud import speech_v1p1beta1 as speech
 import openai
 from dotenv import load_dotenv
-from google.api_core.exceptions import GoogleAPIError
 
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
@@ -18,18 +17,14 @@ GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
 # Configurar credenciais do Google
 if GOOGLE_CREDENTIALS_JSON:
-    try:
-        with open("/tmp/credentials.json", "w") as f:
-            f.write(GOOGLE_CREDENTIALS_JSON)
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/credentials.json"
-    except Exception as e:
-        print(f"Erro ao configurar credenciais do Google: {str(e)}")
+    with open("/tmp/credentials.json", "w") as f:
+        f.write(GOOGLE_CREDENTIALS_JSON)
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/credentials.json"
 
 # Inicializar o app Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Formatos de áudio suportados
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
 
 def verificar_ffmpeg():
@@ -100,11 +95,8 @@ def transcrever_audio():
 
         return jsonify({"transcricao": transcript})
 
-    except GoogleAPIError as e:
-        print(f"Erro na API Google Speech: {str(e)}")
-        return jsonify({"error": f"Erro na API Google Speech: {str(e)}"}), 500
     except Exception as e:
-        print(f"Erro inesperado: {str(e)}")
+        print(f"Erro na transcrição: {str(e)}")
         return jsonify({"error": f"Erro inesperado: {str(e)}"}), 500
 
 @app.route('/anamnese', methods=['POST'])
@@ -116,24 +108,35 @@ def anamnese_texto():
         return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
 
     try:
-        resumo_response = openai.ChatCompletion.create(
+        # Nova chamada da API usando a interface atualizada
+        response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Resuma o seguinte texto:"}, {"role": "user", "content": texto}],
-            max_tokens=300  # Aumentado para respostas mais completas
+            messages=[
+                {"role": "system", "content": "Resuma o seguinte texto:"},
+                {"role": "user", "content": texto}
+            ],
+            max_tokens=150
         )
+        resumo = response['choices'][0]['message']['content'].strip()
+
         topicos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Liste os tópicos principais do texto:"}, {"role": "user", "content": texto}],
+            messages=[
+                {"role": "system", "content": "Liste os tópicos principais do texto:"},
+                {"role": "user", "content": texto}
+            ],
             max_tokens=100
         )
+        topicos = topicos_response['choices'][0]['message']['content'].strip()
+
         tratamentos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Liste exames ou medicamentos apropriados:"}, {"role": "user", "content": texto}],
+            messages=[
+                {"role": "system", "content": "Liste exames ou medicamentos apropriados:"},
+                {"role": "user", "content": texto}
+            ],
             max_tokens=100
         )
-
-        resumo = resumo_response['choices'][0]['message']['content'].strip()
-        topicos = topicos_response['choices'][0]['message']['content'].strip()
         tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
 
         return jsonify({
@@ -142,9 +145,9 @@ def anamnese_texto():
             "tratamentos": tratamentos
         })
 
-    except openai.OpenAIError as e:
+    except openai.error.OpenAIError as e:
         print(f"Erro na API OpenAI: {str(e)}")
-        return jsonify({"error": f"Erro na API OpenAI: {str(e)}"}), 500
+        return jsonify({"error": f"Erro na API: {str(e)}"}), 500
 
     except Exception as e:
         print(f"Erro inesperado: {str(e)}")
