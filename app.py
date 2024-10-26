@@ -6,13 +6,12 @@ from flask_cors import CORS
 from pydub import AudioSegment
 from google.cloud import speech_v1p1beta1 as speech
 import openai
-from openai.error import APIError, InvalidRequestError
 from dotenv import load_dotenv
 
-# Carregar variáveis de ambiente
+# Carregar variáveis de ambiente do .env
 load_dotenv()
 
-# Configuração das chaves de API
+# Configurar as chaves de API
 openai.api_key = os.getenv("OPENAI_API_KEY")
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
@@ -127,7 +126,7 @@ def anamnese_texto():
 
         return jsonify({"resumo": resumo, "topicos": topicos, "tratamentos": tratamentos})
 
-    except (APIError, InvalidRequestError) as e:
+    except openai.error.OpenAIError as e:
         print(f"Erro na API OpenAI: {str(e)}")
         return jsonify({"error": f"Erro na API OpenAI: {str(e)}"}), 500
 
