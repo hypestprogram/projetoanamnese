@@ -146,7 +146,7 @@ def anamnese_texto():
                 "\n- Medicações Prescritas: Liste as medicações recomendadas."
                 "\n- Orientações ao Paciente: Descreva orientações e recomendações ao paciente."
                 "\n- Seguimento e Reavaliação: Informe sobre o plano de seguimento e necessidade de reavaliações futuras."}, {"role": "user", "content": texto}],
-            max_tokens=100
+            max_tokens=200
         )
 
         resumo = resumo_response['choices'][0]['message']['content'].strip()
