@@ -1,1 +1,1 @@
-web: apt-get update && apt-get install -y ffmpeg && gunicorn app:app --workers 8 --bind 0.0.0.0:$PORT --log-level debug
+web: apt-get update && apt-get install -y ffmpeg && gunicorn app:app --workers 2 --threads 2 --bind 0.0.0.0:$PORT --log-level debug
