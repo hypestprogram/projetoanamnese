@@ -122,16 +122,19 @@ def anamnese_texto():
             max_tokens=150
         )
         topicos_response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Liste os principais tópicos identificados na anamnese em no maximo 150 tokens , incluindo se houver:"
-                "\n- Queixa principal"
-                "\n- Evolução dos sintomas"
-                "\n- Fatores agravantes e de alívio"
-                "\n- Histórico médico e familiar"
-                "\n- Achados do exame físico"
-                "\n- Hipóteses diagnósticas e plano terapêutico"}, {"role": "user", "content": texto}],
-            max_tokens=150
-        )
+    model="gpt-3.5-turbo",
+    messages=[{"role": "system", "content": 
+                "Com base exclusivamente na transcrição abaixo, identifique os principais tópicos da anamnese em no máximo 150 tokens, seguindo rigorosamente estas regras:"
+                "\n\n- *Queixa Principal (QP):* [Descreva apenas se mencionado]."
+                "\n- *Evolução dos Sintomas:* [Inclua detalhes relevantes se relatados]."
+                "\n- *Fatores Agravantes e de Alívio:* [Informe conforme descrito]."
+                "\n- *Histórico Médico e Familiar:* [Detalhes apenas mencionados]."
+                "\n- *Achados do Exame Físico:* [Sinais vitais e achados relevantes explicitados]."
+                "\n- *Hipóteses Diagnósticas e Plano Terapêutico:* [Baseadas no relato]."
+            }, 
+            {"role": "user", "content": texto}],
+    max_tokens=150
+)
         tratamentos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "system", "content": "Com base nas informações fornecidas, sugira um plano diagnóstico e terapêutico adequado para o paciente em no maximo 200 tokens. "
