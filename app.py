@@ -109,29 +109,44 @@ def anamnese_texto():
 
     try:
         resumo_response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Organize e resuma o seguinte texto em no máximo 150 tokens, "
-                "focando nas principais seções da anamnese:"
-                "\n1. Identificação do paciente (iniciais, idade, sexo)"
-                "\n2. Queixa principal e duração dos sintomas"
-                "\n3. História da doença atual (início, evolução, fatores agravantes ou de alívio, sintomas associados)"
-                "\n4. Histórico médico, cirúrgico e medicamentoso"
-                "\n5. Histórico familiar e social (doenças hereditárias, hábitos de vida)"
-                "\n6. Exame físico (sinais vitais e achados relevantes)"
-                "\n7. Hipóteses diagnósticas e plano terapêutico" }, {"role": "user", "content": texto}],
-            max_tokens=150
-        )
+    model="gpt-3.5-turbo",
+    messages=[{"role": "system", "content": 
+                "Com base exclusivamente na transcrição abaixo, gere uma anamnese no formato SOAP, seguindo estas regras:"
+                "\n\n*1. Fidelidade ao texto:* Não complemente informações não mencionadas. Se algo não for relatado, escreva 'Não relatado'."
+                "\n\n*2. Formato SOAP:*"
+                "\n- *S (Subjetivo):* Dados relatados pelo paciente."
+                "\n  - Identificação: [Iniciais], [Idade], [Sexo]."
+                "\n  - Queixa Principal (QP): [Descreva sintomas e duração apenas se mencionados]."
+                "\n  - História da Doença Atual (HDA): [Relate início, evolução, fatores agravantes/alívio, sintomas associados apenas como descrito]."
+                "\n  - Antecedentes: [Inclua histórico médico, cirúrgico, medicamentoso, familiar e social somente se mencionados]."
+                "\n\n- *O (Objetivo):* Dados observáveis ou registrados."
+                "\n  - Exame Físico: [Sinais vitais e achados explicitamente descritos]."
+                "\n  - Exames Complementares: [Resuma resultados conforme as regras abaixo]."
+                "\n\n*Regras para Exames:*"
+                "\n- Formato: Data | Resultados resumidos com abreviações e números absolutos (Ex.: HB: 14.5 | HT: 42% | Troponina: 3.2)."
+                "\n- Use abreviações: Hemoglobina → HB | Hematócrito → HT | Troponina → TRP."
+                "\n- Exclua: Hemácias, valores normais ou unidades."
+                "\n\n- *A (Avaliação):* Liste hipóteses diagnósticas com base no relato. Não justifique além do descrito."
+                "\n\n- *P (Plano):* Proposta terapêutica com base nos dados."
+                "\n  - Conduta: [Exames solicitados, medicações e orientações mencionadas]."
+            }, 
+            {"role": "user", "content": texto}],
+    max_tokens=150
+)
         topicos_response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Liste os principais tópicos identificados na anamnese em no maximo 150 tokens , incluindo se houver:"
-                "\n- Queixa principal"
-                "\n- Evolução dos sintomas"
-                "\n- Fatores agravantes e de alívio"
-                "\n- Histórico médico e familiar"
-                "\n- Achados do exame físico"
-                "\n- Hipóteses diagnósticas e plano terapêutico"}, {"role": "user", "content": texto}],
-            max_tokens=150
-        )
+    model="gpt-3.5-turbo",
+    messages=[{"role": "system", "content": 
+                "Com base exclusivamente na transcrição abaixo, identifique os principais tópicos da anamnese em no máximo 150 tokens, seguindo rigorosamente estas regras:"
+                "\n\n- *Queixa Principal (QP):* [Descreva apenas se mencionado]."
+                "\n- *Evolução dos Sintomas:* [Inclua detalhes relevantes se relatados]."
+                "\n- *Fatores Agravantes e de Alívio:* [Informe conforme descrito]."
+                "\n- *Histórico Médico e Familiar:* [Detalhes apenas mencionados]."
+                "\n- *Achados do Exame Físico:* [Sinais vitais e achados relevantes explicitados]."
+                "\n- *Hipóteses Diagnósticas e Plano Terapêutico:* [Baseadas no relato]."
+            }, 
+            {"role": "user", "content": texto}],
+    max_tokens=150
+)
         tratamentos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "system", "content": "Com base nas informações fornecidas, sugira um plano diagnóstico e terapêutico adequado para o paciente em no maximo 200 tokens. "
