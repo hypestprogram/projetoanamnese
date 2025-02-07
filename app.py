@@ -143,24 +143,41 @@ def transcrever_audio():
             language_code="pt-BR"
         )
 
-        if duration <= 60:
-            # Para áudio curto, utiliza o método síncrono (rápido)
-            recognition_audio = speech.RecognitionAudio(content=audio_stream.read())
-            response = client.recognize(config=config, audio=recognition_audio)
-        else:
-            # Para áudio de mais de 1 minuto (até 10 minutos), utiliza o método assíncrono com upload para o GCS
-            if not GCS_BUCKET_NAME:
-                return jsonify({"error": "GCS_BUCKET_NAME não configurado para áudios longos."}), 500
-            destination_blob_name = f"temp_audio_{uuid.uuid4().hex}.wav"
-            gcs_uri = upload_to_gcs(audio_stream, GCS_BUCKET_NAME, destination_blob_name)
-            recognition_audio = speech.RecognitionAudio(uri=gcs_uri)
-            operation = client.long_running_recognize(config=config, audio=recognition_audio)
-            response = operation.result(timeout=600)  # Timeout de 600 segundos (10 minutos)
-            # Após a transcrição, exclui o arquivo do GCS
-            delete_from_gcs(GCS_BUCKET_NAME, destination_blob_name)
+        if duration > 60:
+    if not GCS_BUCKET_NAME:
+        return jsonify({"error": "GCS_BUCKET_NAME não configurado para áudios longos."}), 500
 
-        transcript = " ".join([result.alternatives[0].transcript for result in response.results])
-        return jsonify({"transcricao": transcript})
+    destination_blob_name = f"temp_audio_{uuid.uuid4().hex}.wav"
+    gcs_uri = upload_to_gcs(audio_stream, GCS_BUCKET_NAME, destination_blob_name)
+    recognition_audio = speech.RecognitionAudio(uri=gcs_uri)
+
+    # 🔹 Configuração aprimorada para transcrição mais rápida
+    config = speech.RecognitionConfig(
+        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+        sample_rate_hertz=16000,  # 🔹 Reduz taxa de amostragem para otimizar velocidade
+        language_code="pt-BR",
+        alternative_language_codes=["pt-PT"],  # 🔹 Suporte a variações do português
+        enable_automatic_punctuation=True,  # 🔹 Adiciona pontuação automática
+        enable_speaker_diarization=True,  # 🔹 Separa falas de diferentes pessoas
+        diarization_speaker_count=2,  # 🔹 Estima 2 participantes na conversa
+        use_enhanced=True,  # 🔹 Usa modelo otimizado para maior performance
+        model="video"  # 🔹 Modelo mais rápido para áudio longo
+    )
+
+    print("🔹 Iniciando transcrição assíncrona no Cloud Speech-to-Text...")
+    operation = client.long_running_recognize(config=config, audio=recognition_audio)
+
+    # 🔹 Aguarda o processamento sem bloquear completamente
+    import time
+    while not operation.done():
+        print("⏳ Processando transcrição no Google Cloud...")
+        time.sleep(5)  # 🔹 Aguarda 5 segundos antes de verificar o progresso
+
+    response = operation.result(timeout=300)  # 🔹 Tempo máximo de espera: 5 minutos
+    delete_from_gcs(GCS_BUCKET_NAME, destination_blob_name)  # 🔹 Deleta após processar
+
+    transcript = " ".join([result.alternatives[0].transcript for result in response.results])
+    return jsonify({"transcricao": transcript})
 
     except Exception as e:
         print(f"Erro na transcrição: {str(e)}")
