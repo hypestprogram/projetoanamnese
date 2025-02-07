@@ -2,10 +2,12 @@ import os
 import io
 import json
 import subprocess
+import uuid
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pydub import AudioSegment
 from google.cloud import speech_v1p1beta1 as speech
+from google.cloud import storage
 from dotenv import load_dotenv
 import openai
 
@@ -14,12 +16,11 @@ load_dotenv()
 
 # Configurar chaves de API
 openai.api_key = os.getenv("OPENAI_API_KEY")
-GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+# Configure sua variável GOOGLE_APPLICATION_CREDENTIALS no .env para apontar para o arquivo JSON da chave:
+# Ex.: GOOGLE_APPLICATION_CREDENTIALS=./caminho/para/sua-chave.json
 
-if GOOGLE_CREDENTIALS_JSON:
-    with open("/tmp/credentials.json", "w") as f:
-        f.write(GOOGLE_CREDENTIALS_JSON)
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/credentials.json"
+# Nome do bucket no Google Cloud Storage para upload de áudios longos
+GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
 
 # Inicializar o app Flask
 app = Flask(__name__)
@@ -38,20 +39,40 @@ def verificar_ffmpeg():
 verificar_ffmpeg()
 
 def convert_audio(audio_bytes, target_format='wav'):
-    """Converte áudio para WAV e ajusta para 16-bit PCM."""
+    """
+    Converte o áudio para WAV com 16-bit PCM, retorna um BytesIO, a taxa de amostragem e a duração (em segundos).
+    """
     try:
-        audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
-        audio = audio.set_sample_width(2)  # 2 bytes = 16 bits por amostra
-        sample_rate = audio.frame_rate
+        original_audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
+        original_audio = original_audio.set_sample_width(2)  # 2 bytes = 16 bits por amostra
+        sample_rate = original_audio.frame_rate
+        duration = len(original_audio) / 1000.0  # duração em segundos
 
         audio_io = io.BytesIO()
-        audio.export(audio_io, format=target_format)
+        original_audio.export(audio_io, format=target_format)
         audio_io.seek(0)
 
-        print(f"Áudio convertido para: {target_format} com taxa de {sample_rate} Hz")
-        return audio_io, sample_rate
+        print(f"Áudio convertido para: {target_format} com taxa de {sample_rate} Hz e duração de {duration} segundos")
+        return audio_io, sample_rate, duration
     except Exception as e:
         print(f"Erro na conversão de áudio: {str(e)}")
+        raise
+
+def upload_to_gcs(audio_io, bucket_name, destination_blob_name):
+    """
+    Faz o upload do áudio (BytesIO) para o Google Cloud Storage e retorna o GCS URI.
+    """
+    try:
+        audio_io.seek(0)
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(bucket_name)
+        blob = bucket.blob(destination_blob_name)
+        blob.upload_from_file(audio_io, content_type='audio/wav')
+        gcs_uri = f"gs://{bucket_name}/{destination_blob_name}"
+        print(f"Áudio enviado para o GCS: {gcs_uri}")
+        return gcs_uri
+    except Exception as e:
+        print(f"Erro ao enviar áudio para o GCS: {str(e)}")
         raise
 
 @app.route('/', methods=['GET'])
@@ -77,26 +98,34 @@ def transcrever_audio():
                 "error": f"Formato não suportado: {mime_type}. Formatos suportados: {SUPPORTED_FORMATS}"
             }), 400
 
-        # Converter áudio e detectar taxa de amostragem
-        audio_stream, sample_rate = convert_audio(audio_bytes)
+        # Converter áudio e obter taxa de amostragem e duração
+        audio_stream, sample_rate, duration = convert_audio(audio_bytes)
 
-        # Configurar o cliente do Google Cloud Speech-to-Text
         client = speech.SpeechClient()
-        audio_content = audio_stream.read()
-        recognition_audio = speech.RecognitionAudio(content=audio_content)
         config = speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
             sample_rate_hertz=sample_rate,
             language_code="pt-BR"
         )
 
-        # Realizar a transcrição utilizando o método assíncrono para áudios longos
+        # Se o áudio tiver mais de 60 segundos, faça o upload para o GCS e use o URI
+        if duration > 60:
+            if not GCS_BUCKET_NAME:
+                return jsonify({"error": "Para áudios maiores que 60 segundos, é necessário configurar a variável GCS_BUCKET_NAME."}), 500
+            destination_blob_name = f"temp_audio_{uuid.uuid4().hex}.wav"
+            gcs_uri = upload_to_gcs(audio_stream, GCS_BUCKET_NAME, destination_blob_name)
+            recognition_audio = speech.RecognitionAudio(uri=gcs_uri)
+        else:
+            # Áudio inline para áudios curtos
+            audio_stream.seek(0)
+            recognition_audio = speech.RecognitionAudio(content=audio_stream.read())
+
+        # Realizar a transcrição utilizando o método assíncrono
         operation = client.long_running_recognize(config=config, audio=recognition_audio)
         # Timeout definido para 600 segundos (10 minutos); ajuste se necessário
         response = operation.result(timeout=600)
 
         transcript = " ".join([result.alternatives[0].transcript for result in response.results])
-
         return jsonify({"transcricao": transcript})
 
     except Exception as e:
