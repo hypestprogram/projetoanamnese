@@ -91,6 +91,28 @@ def upload_to_gcs(audio_io, bucket_name, destination_blob_name):
         print(f"Erro ao enviar áudio para o GCS: {str(e)}")
         raise
 
+def delete_from_gcs(bucket_name, blob_name):
+    """
+    Exclui o objeto (arquivo) especificado no bucket do GCS.
+    """
+    try:
+        # Utiliza as mesmas credenciais configuradas para o Storage
+        storage_key = os.getenv("GOOGLE_APPLICATION_STORAGE_CREDENTIALS_JSON")
+        if storage_key:
+            temp_storage_path = "/tmp/storage_credentials.json"
+            with open(temp_storage_path, "w") as f:
+                f.write(storage_key)
+            storage_credentials = service_account.Credentials.from_service_account_file(temp_storage_path)
+            storage_client = storage.Client(credentials=storage_credentials)
+        else:
+            storage_client = storage.Client()
+        bucket = storage_client.bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+        blob.delete()
+        print(f"Arquivo '{blob_name}' deletado do bucket '{bucket_name}'.")
+    except Exception as e:
+        print(f"Erro ao deletar o arquivo do GCS: {str(e)}")
+
 @app.route('/', methods=['GET'])
 def health_check():
     return jsonify({"status": "API ativa e funcionando"}), 200
@@ -134,6 +156,8 @@ def transcrever_audio():
             recognition_audio = speech.RecognitionAudio(uri=gcs_uri)
             operation = client.long_running_recognize(config=config, audio=recognition_audio)
             response = operation.result(timeout=600)  # Timeout de 600 segundos (10 minutos)
+            # Após a transcrição, exclui o arquivo do GCS
+            delete_from_gcs(GCS_BUCKET_NAME, destination_blob_name)
 
         transcript = " ".join([result.alternatives[0].transcript for result in response.results])
         return jsonify({"transcricao": transcript})
