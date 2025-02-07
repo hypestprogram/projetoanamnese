@@ -80,17 +80,21 @@ def transcrever_audio():
         # Converter áudio e detectar taxa de amostragem
         audio_stream, sample_rate = convert_audio(audio_bytes)
 
-        # Configurar o cliente do Google Speech-to-Text
+        # Configurar o cliente do Google Cloud Speech-to-Text
         client = speech.SpeechClient()
-        audio = speech.RecognitionAudio(content=audio_stream.read())
+        audio_content = audio_stream.read()
+        recognition_audio = speech.RecognitionAudio(content=audio_content)
         config = speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
             sample_rate_hertz=sample_rate,
             language_code="pt-BR"
         )
 
-        # Realizar a transcrição
-        response = client.recognize(config=config, audio=audio)
+        # Realizar a transcrição utilizando o método assíncrono para áudios longos
+        operation = client.long_running_recognize(config=config, audio=recognition_audio)
+        # Timeout definido para 600 segundos (10 minutos); ajuste se necessário
+        response = operation.result(timeout=600)
+
         transcript = " ".join([result.alternatives[0].transcript for result in response.results])
 
         return jsonify({"transcricao": transcript})
@@ -109,53 +113,62 @@ def anamnese_texto():
 
     try:
         resumo_response = openai.ChatCompletion.create(
-    model="gpt-3.5-turbo",
-    messages=[{"role": "system", "content": 
-                "Com base exclusivamente na transcrição abaixo, gere uma anamnese no formato SOAP, seguindo estas regras:"
-                "\n\n*1. Fidelidade ao texto:* Não complemente informações não mencionadas. Se algo não for relatado, escreva 'Não relatado'."
-                "\n\n*2. Formato SOAP:*"
-                "\n- *S (Subjetivo):* Dados relatados pelo paciente."
-                "\n  - Identificação: [Iniciais], [Idade], [Sexo]."
-                "\n  - Queixa Principal (QP): [Descreva sintomas e duração apenas se mencionados]."
-                "\n  - História da Doença Atual (HDA): [Relate início, evolução, fatores agravantes/alívio, sintomas associados apenas como descrito]."
-                "\n  - Antecedentes: [Inclua histórico médico, cirúrgico, medicamentoso, familiar e social somente se mencionados]."
-                "\n\n- *O (Objetivo):* Dados observáveis ou registrados."
-                "\n  - Exame Físico: [Sinais vitais e achados explicitamente descritos]."
-                "\n  - Exames Complementares: [Resuma resultados conforme as regras abaixo]."
-                "\n\n*Regras para Exames:*"
-                "\n- Formato: Data | Resultados resumidos com abreviações e números absolutos (Ex.: HB: 14.5 | HT: 42% | Troponina: 3.2)."
-                "\n- Use abreviações: Hemoglobina → HB | Hematócrito → HT | Troponina → TRP."
-                "\n- Exclua: Hemácias, valores normais ou unidades."
-                "\n\n- *A (Avaliação):* Liste hipóteses diagnósticas com base no relato. Não justifique além do descrito."
-                "\n\n- *P (Plano):* Proposta terapêutica com base nos dados."
-                "\n  - Conduta: [Exames solicitados, medicações e orientações mencionadas]."
-            }, 
-            {"role": "user", "content": texto}],
-    max_tokens=150
-)
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": 
+                 "Com base exclusivamente na transcrição abaixo, gere uma anamnese no formato SOAP, seguindo estas regras:"
+                 "\n\n*1. Fidelidade ao texto:* Não complemente informações não mencionadas. Se algo não for relatado, escreva 'Não relatado'."
+                 "\n\n*2. Formato SOAP:*"
+                 "\n- *S (Subjetivo):* Dados relatados pelo paciente."
+                 "\n  - Identificação: [Iniciais], [Idade], [Sexo]."
+                 "\n  - Queixa Principal (QP): [Descreva sintomas e duração apenas se mencionados]."
+                 "\n  - História da Doença Atual (HDA): [Relate início, evolução, fatores agravantes/alívio, sintomas associados apenas como descrito]."
+                 "\n  - Antecedentes: [Inclua histórico médico, cirúrgico, medicamentoso, familiar e social somente se mencionados]."
+                 "\n\n- *O (Objetivo):* Dados observáveis ou registrados."
+                 "\n  - Exame Físico: [Sinais vitais e achados explicitamente descritos]."
+                 "\n  - Exames Complementares: [Resuma resultados conforme as regras abaixo]."
+                 "\n\n*Regras para Exames:*"
+                 "\n- Formato: Data | Resultados resumidos com abreviações e números absolutos (Ex.: HB: 14.5 | HT: 42% | Troponina: 3.2)."
+                 "\n- Use abreviações: Hemoglobina → HB | Hematócrito → HT | Troponina → TRP."
+                 "\n- Exclua: Hemácias, valores normais ou unidades."
+                 "\n\n- *A (Avaliação):* Liste hipóteses diagnósticas com base no relato. Não justifique além do descrito."
+                 "\n\n- *P (Plano):* Proposta terapêutica com base nos dados."
+                 "\n  - Conduta: [Exames solicitados, medicações e orientações mencionadas]."
+                },
+                {"role": "user", "content": texto}
+            ],
+            max_tokens=150
+        )
         topicos_response = openai.ChatCompletion.create(
-    model="gpt-3.5-turbo",
-    messages=[{"role": "system", "content": 
-                "Com base exclusivamente na transcrição abaixo, identifique os principais tópicos da anamnese em no máximo 150 tokens, seguindo rigorosamente estas regras:"
-                "\n\n- *Queixa Principal (QP):* [Descreva apenas se mencionado]."
-                "\n- *Evolução dos Sintomas:* [Inclua detalhes relevantes se relatados]."
-                "\n- *Fatores Agravantes e de Alívio:* [Informe conforme descrito]."
-                "\n- *Histórico Médico e Familiar:* [Detalhes apenas mencionados]."
-                "\n- *Achados do Exame Físico:* [Sinais vitais e achados relevantes explicitados]."
-                "\n- *Hipóteses Diagnósticas e Plano Terapêutico:* [Baseadas no relato]."
-            }, 
-            {"role": "user", "content": texto}],
-    max_tokens=150
-)
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": 
+                 "Com base exclusivamente na transcrição abaixo, identifique os principais tópicos da anamnese em no máximo 150 tokens, seguindo rigorosamente estas regras:"
+                 "\n\n- *Queixa Principal (QP):* [Descreva apenas se mencionado]."
+                 "\n- *Evolução dos Sintomas:* [Inclua detalhes relevantes se relatados]."
+                 "\n- *Fatores Agravantes e de Alívio:* [Informe conforme descrito]."
+                 "\n- *Histórico Médico e Familiar:* [Detalhes apenas mencionados]."
+                 "\n- *Achados do Exame Físico:* [Sinais vitais e achados relevantes explicitados]."
+                 "\n- *Hipóteses Diagnósticas e Plano Terapêutico:* [Baseadas no relato]."
+                },
+                {"role": "user", "content": texto}
+            ],
+            max_tokens=150
+        )
         tratamentos_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Com base nas informações fornecidas, sugira um plano diagnóstico e terapêutico adequado para o paciente em no maximo 200 tokens. "
-                "Inclua as seguintes seções:"
-                "\n- Hipóteses Diagnósticas: Liste possíveis diagnósticos diferenciais."
-                "\n- Exames Complementares Solicitados: Informe quais exames são necessários."
-                "\n- Medicações Prescritas: Liste as medicações recomendadas."
-                "\n- Orientações ao Paciente: Descreva orientações e recomendações ao paciente."
-                "\n- Seguimento e Reavaliação: Informe sobre o plano de seguimento e necessidade de reavaliações futuras."}, {"role": "user", "content": texto}],
+            messages=[
+                {"role": "system", "content": 
+                 "Com base nas informações fornecidas, sugira um plano diagnóstico e terapêutico adequado para o paciente em no maximo 200 tokens. "
+                 "Inclua as seguintes seções:"
+                 "\n- Hipóteses Diagnósticas: Liste possíveis diagnósticos diferenciais."
+                 "\n- Exames Complementares Solicitados: Informe quais exames são necessários."
+                 "\n- Medicações Prescritas: Liste as medicações recomendadas."
+                 "\n- Orientações ao Paciente: Descreva orientações e recomendações ao paciente."
+                 "\n- Seguimento e Reavaliação: Informe sobre o plano de seguimento e necessidade de reavaliações futuras."
+                },
+                {"role": "user", "content": texto}
+            ],
             max_tokens=200
         )
 
