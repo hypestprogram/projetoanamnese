@@ -151,7 +151,8 @@ def transcrever_audio():
             # Para áudio de mais de 1 minuto (até 10 minutos), utiliza o método assíncrono com upload para o GCS
             if not GCS_BUCKET_NAME:
                 return jsonify({"error": "GCS_BUCKET_NAME não configurado para áudios longos."}), 500
-            destination_blob_name = f"temp_audio_{uuid.uuid4().hex}.wav"
+            destination_blob_name = f"temp_audio_{uuid.uuid4().hex}.flac"
+audio_stream = convert_audio(audio_bytes, target_format="flac")[0]  # Converter para FLAC
             gcs_uri = upload_to_gcs(audio_stream, GCS_BUCKET_NAME, destination_blob_name)
             recognition_audio = speech.RecognitionAudio(uri=gcs_uri)
             operation = client.long_running_recognize(config=config, audio=recognition_audio)
