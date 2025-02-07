@@ -8,18 +8,18 @@ from flask_cors import CORS
 from pydub import AudioSegment
 from google.cloud import speech_v1p1beta1 as speech
 from google.cloud import storage
+from google.oauth2 import service_account
 from dotenv import load_dotenv
 import openai
 
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
 
-# Configurar chaves de API
+# Configurar chaves de API para o Speech-to-Text (credenciais padrão)
 openai.api_key = os.getenv("OPENAI_API_KEY")
-# Configure sua variável GOOGLE_APPLICATION_CREDENTIALS no .env para apontar para o arquivo JSON da chave:
-# Ex.: GOOGLE_APPLICATION_CREDENTIALS=./caminho/para/sua-chave.json
+# A variável GOOGLE_APPLICATION_CREDENTIALS deve estar configurada apontando para o arquivo JSON da chave do Speech-to-Text
 
-# Nome do bucket no Google Cloud Storage para upload de áudios longos
+# Nome do bucket do Cloud Storage para upload de áudios longos
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
 
 # Inicializar o app Flask
@@ -40,11 +40,12 @@ verificar_ffmpeg()
 
 def convert_audio(audio_bytes, target_format='wav'):
     """
-    Converte o áudio para WAV com 16-bit PCM, retorna um BytesIO, a taxa de amostragem e a duração (em segundos).
+    Converte o áudio para WAV com 16-bit PCM, retornando um BytesIO,
+    a taxa de amostragem e a duração (em segundos).
     """
     try:
         original_audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
-        original_audio = original_audio.set_sample_width(2)  # 2 bytes = 16 bits por amostra
+        original_audio = original_audio.set_sample_width(2)  # 16 bits por amostra
         sample_rate = original_audio.frame_rate
         duration = len(original_audio) / 1000.0  # duração em segundos
 
@@ -60,11 +61,24 @@ def convert_audio(audio_bytes, target_format='wav'):
 
 def upload_to_gcs(audio_io, bucket_name, destination_blob_name):
     """
-    Faz o upload do áudio (BytesIO) para o Google Cloud Storage e retorna o GCS URI.
+    Faz o upload do áudio (BytesIO) para o Google Cloud Storage utilizando as credenciais
+    definidas na variável GOOGLE_APPLICATION_STORAGE_CREDENTIALS_JSON e retorna o GCS URI.
     """
     try:
         audio_io.seek(0)
-        storage_client = storage.Client()
+        # Tenta obter as credenciais para o Cloud Storage da variável personalizada
+        storage_key = os.getenv("GOOGLE_APPLICATION_STORAGE_CREDENTIALS_JSON")
+        if storage_key:
+            # Escreve o conteúdo do JSON em um arquivo temporário
+            temp_storage_path = "/tmp/storage_credentials.json"
+            with open(temp_storage_path, "w") as f:
+                f.write(storage_key)
+            storage_credentials = service_account.Credentials.from_service_account_file(temp_storage_path)
+            storage_client = storage.Client(credentials=storage_credentials)
+        else:
+            # Caso contrário, usa as credenciais padrão (por exemplo, as definidas em GOOGLE_APPLICATION_CREDENTIALS)
+            storage_client = storage.Client()
+
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(destination_blob_name)
         blob.upload_from_file(audio_io, content_type='audio/wav')
@@ -108,7 +122,7 @@ def transcrever_audio():
             language_code="pt-BR"
         )
 
-        # Se o áudio tiver mais de 60 segundos, faça o upload para o GCS e use o URI
+        # Se o áudio tiver mais de 60 segundos, faça upload para o GCS
         if duration > 60:
             if not GCS_BUCKET_NAME:
                 return jsonify({"error": "Para áudios maiores que 60 segundos, é necessário configurar a variável GCS_BUCKET_NAME."}), 500
@@ -122,8 +136,7 @@ def transcrever_audio():
 
         # Realizar a transcrição utilizando o método assíncrono
         operation = client.long_running_recognize(config=config, audio=recognition_audio)
-        # Timeout definido para 600 segundos (10 minutos); ajuste se necessário
-        response = operation.result(timeout=600)
+        response = operation.result(timeout=600)  # Timeout de 600 segundos (10 minutos)
 
         transcript = " ".join([result.alternatives[0].transcript for result in response.results])
         return jsonify({"transcricao": transcript})
