@@ -237,7 +237,7 @@ def anamnese_texto():
             ],
             max_tokens=200
         )
-        mensagem_paciente_response = openai.ChatCompletion.create(
+        mensagem_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": 
@@ -251,12 +251,12 @@ def anamnese_texto():
         resumo = resumo_response['choices'][0]['message']['content'].strip()
         topicos = topicos_response['choices'][0]['message']['content'].strip()
         tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
-        mensagem_paciente = mensagem_paciente_response['choices'][0]['message']['content'].strip()
+        mensagem = mensagem_paciente_response['choices'][0]['message']['content'].strip()
         return jsonify({
             "resumo": resumo, 
             "topicos": topicos, 
             "tratamentos": tratamentos,
-            "mensagem_paciente": mensagem_paciente
+            "mensagem": mensagem
         })
     except Exception as e:
         print(f"Erro na anamnese: {str(e)}")
