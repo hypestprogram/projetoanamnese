@@ -251,7 +251,7 @@ def anamnese_texto():
         resumo = resumo_response['choices'][0]['message']['content'].strip()
         topicos = topicos_response['choices'][0]['message']['content'].strip()
         tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
-        mensagem = mensagem_paciente_response['choices'][0]['message']['content'].strip()
+        mensagem = mensagem_response['choices'][0]['message']['content'].strip()
         return jsonify({
             "resumo": resumo, 
             "topicos": topicos, 
