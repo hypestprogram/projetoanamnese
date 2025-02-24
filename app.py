@@ -237,10 +237,27 @@ def anamnese_texto():
             ],
             max_tokens=200
         )
+        mensagem_paciente_response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": 
+                 "Com base exclusivamente na transcrição abaixo, crie uma mensagem breve e clara de orientação para o paciente. "
+                 "A mensagem deve iniciar com 'Olá, [nome do paciente, se não informado, deixe em branco]!' e listar as orientações em tópicos numerados, "
+                 "terminando com uma despedida breve, por exemplo, 'Qualquer dúvida, estou à disposição.'."},
+                {"role": "user", "content": texto}
+            ],
+            max_tokens=100
+        )
         resumo = resumo_response['choices'][0]['message']['content'].strip()
         topicos = topicos_response['choices'][0]['message']['content'].strip()
         tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
-        return jsonify({"resumo": resumo, "topicos": topicos, "tratamentos": tratamentos})
+        mensagem_paciente = mensagem_paciente_response['choices'][0]['message']['content'].strip()
+        return jsonify({
+            "resumo": resumo, 
+            "topicos": topicos, 
+            "tratamentos": tratamentos,
+            "mensagem_paciente": mensagem_paciente
+        })
     except Exception as e:
         print(f"Erro na anamnese: {str(e)}")
         return jsonify({"error": str(e)}), 500
