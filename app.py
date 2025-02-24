@@ -237,27 +237,38 @@ def anamnese_texto():
             ],
             max_tokens=200
         )
+                # Geração da Mensagem para o Paciente
         mensagem_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": 
-                 "Com base exclusivamente na transcrição abaixo, crie uma mensagem breve e clara de orientação para o paciente. "
-                 "A mensagem deve iniciar com 'Olá, [nome do paciente, se não informado, deixe em branco]!' e listar as orientações em tópicos numerados, "
-                 "terminando com uma despedida breve, por exemplo, 'Qualquer dúvida, estou à disposição.'."},
-                {"role": "user", "content": texto}
+                {
+                    "role": "system",
+                    "content": (
+                        "Crie uma mensagem breve e clara de orientação para o paciente, "
+                        "com base exclusivamente no texto a seguir, sem inventar dados. "
+                        "Inicie com 'Olá, [nome do paciente, se nao foi falado, deixe em branco]!' e liste as orientações em tópicos "
+                        "numerados. Termine com uma despedida breve, por exemplo 'Qualquer dúvida, "
+                        "estou à disposição. Atenciosamente...'."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": texto
+                }
             ],
             max_tokens=100
         )
+
+        # Extrair resultados
         resumo = resumo_response['choices'][0]['message']['content'].strip()
         topicos = topicos_response['choices'][0]['message']['content'].strip()
         tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
-        mensagem = mensagem_response['choices'][0]['message']['content'].strip()
-        return jsonify({
-            "resumo": resumo, 
-            "topicos": topicos, 
-            "tratamentos": tratamentos,
-            "mensagem": mensagem
-        })
+         mensagem = mensagem_response['choices'][0]['message']['content'].strip()
+        return jsonify({"resumo": resumo,
+                        "topicos": topicos,
+                        "tratamentos": tratamentos,
+                        "mensagem": mensagem
+                       })
     except Exception as e:
         print(f"Erro na anamnese: {str(e)}")
         return jsonify({"error": str(e)}), 500
