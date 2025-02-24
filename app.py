@@ -209,7 +209,7 @@ def anamnese_texto():
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": 
-                 "Com base exclusivamente na transcrição abaixo, identifique os principais tópicos da anamnese em no máximo 150 tokens, seguindo rigorosamente estas regras:"
+                 "Com base exclusivamente na transcrição abaixo, identifique os principais tópicos da anamnese em no máximo 150 tokens, seguindo rigorosamente estas regras: Não complemente informações não mencionadas."
                  "\n\n- *Queixa Principal (QP):* [Descreva apenas se mencionado]."
                  "\n- *Evolução dos Sintomas:* [Inclua detalhes relevantes se relatados]."
                  "\n- *Fatores Agravantes e de Alívio:* [Informe conforme descrito]."
