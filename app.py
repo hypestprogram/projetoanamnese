@@ -28,12 +28,7 @@ GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
 
 # Inicializar o app Flask
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": [
-    "https://anexarexames.onrender.com",
-    "https://projetoanamnese.onrender.com",
-    "https://sapphir-ai.com.br",
-    "https://www.sapphir-ai.com.br"
-]}})
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
