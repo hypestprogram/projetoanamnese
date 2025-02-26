@@ -12,6 +12,7 @@ from google.cloud import storage
 from google.oauth2 import service_account
 from dotenv import load_dotenv
 import openai
+from urllib.parse import urlparse  # Para analisar a URL do referer
 
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
@@ -29,18 +30,45 @@ GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
 
 # Inicializar o app Flask
 app = Flask(__name__)
+
+# Configurar CORS apenas para os domínios desejados
 CORS(app, resources={r"/*": {"origins": [
     "https://anexarexames.onrender.com",
     "https://projetoanamnese.onrender.com",
     "https://sapphir-ai.com.br",
     "https://www.sapphir-ai.com.br"
 ]}})
- 
-# Função para logar o cabeçalho Origin de cada requisição
+
+# Lista de domínios permitidos para o Referer
+ALLOWED_REFERRERS = [
+    "anexarexames.onrender.com",
+    "projetoanamnese.onrender.com",
+    "sapphir-ai.com.br",
+    "www.sapphir-ai.com.br"
+]
+
+# Loga o cabeçalho Origin
 @app.before_request
 def log_origin():
     origin = request.headers.get("Origin")
     print("Origin da requisição:", origin)
+
+# Verificação do Referer
+@app.before_request
+def check_referer():
+    # Podemos permitir GET em '/' para health_check sem referer
+    if request.path == '/' and request.method == 'GET':
+        return  # segue normalmente
+
+    referer = request.headers.get("Referer")
+    if not referer:
+        # Se não houver referer, bloqueia (ou você pode permitir se quiser)
+        return jsonify({"error": "Acesso negado: referer ausente"}), 403
+
+    parsed = urlparse(referer)
+    # O netloc contém o domínio + porta (ex: "www.sapphir-ai.com.br")
+    if parsed.netloc not in ALLOWED_REFERRERS:
+        return jsonify({"error": "Acesso negado: referer inválido"}), 403
 
 @app.route('/', methods=['GET'])
 def health_check():
@@ -126,7 +154,6 @@ def delete_from_gcs(bucket_name, blob_name):
     except Exception as e:
         print(f"Erro ao deletar o arquivo do GCS: {str(e)}")
 
-# Função auxiliar para chamar a API da OpenAI com retentativas
 def call_openai_completion(messages, max_tokens):
     retries = 3
     for i in range(retries):
@@ -158,7 +185,6 @@ def transcrever_audio():
         if mime_type not in SUPPORTED_FORMATS:
             return jsonify({"error": f"Formato não suportado: {mime_type}. Formatos suportados: {SUPPORTED_FORMATS}"}), 400
 
-        # Converter áudio para WAV para áudios curtos
         audio_stream_wav, sample_rate, duration = convert_audio(audio_bytes, target_format='wav')
 
         client = speech.SpeechClient()
@@ -202,7 +228,6 @@ def anamnese_texto():
     if not texto:
         return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
 
-    # Inicializa variáveis com valores padrão (vazio)
     resumo = ""
     topicos = ""
     tratamentos = ""
@@ -241,8 +266,8 @@ def anamnese_texto():
                 {"role": "system", "content": 
                  "Com base exclusivamente na transcrição abaixo, identifique os principais tópicos da anamnese em no máximo 150 tokens, seguindo rigorosamente estas regras: Não complemente informações não mencionadas."
                  "\n\n- *Queixa Principal (QP):* [Descreva apenas se mencionado]."
-                 "\n- *Evolução dos Sintomas:* [Inclua detalhes relevantes se relatados]."
-                 "\n- *Fatores Agravantes e de Alívio:* [Informe conforme descrito]."
+                 "\n- *Evolução dos Sintomas:* [Inclua detalhes relevantes apenas se relatados]."
+                 "\n- *Fatores Agravantes e de Alívio:* [Informe conforme descrito, nao invente nada que nao foi descrito]."
                  "\n- *Histórico Médico e Familiar:* [Detalhes apenas mencionados]."
                  "\n- *Achados do Exame Físico:* [Sinais vitais e achados relevantes explicitados]."
                  "\n- *Hipóteses Diagnósticas e Plano Terapêutico:* [Baseadas no relato]."
