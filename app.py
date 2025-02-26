@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 import openai
 from urllib.parse import urlparse  # Para analisar a URL do referer
 
-# Carregar variáveis de ambiente do arquivo .env
+# Carregar variáveis de ambiente
 load_dotenv()
 
 # Configurar chaves de API
@@ -31,7 +31,7 @@ GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
 # Inicializar o app Flask
 app = Flask(__name__)
 
-# Configurar CORS apenas para os domínios desejados
+# Configurar CORS para permitir apenas os domínios autorizados
 CORS(app, resources={r"/*": {"origins": [
     "https://anexarexames.onrender.com",
     "https://projetoanamnese.onrender.com",
@@ -47,26 +47,21 @@ ALLOWED_REFERRERS = [
     "www.sapphir-ai.com.br"
 ]
 
-# Loga o cabeçalho Origin
+# Loga o cabeçalho Origin de cada requisição
 @app.before_request
 def log_origin():
     origin = request.headers.get("Origin")
     print("Origin da requisição:", origin)
 
-# Verificação do Referer
+# Verificação do Referer (exceto para GET em '/')
 @app.before_request
 def check_referer():
-    # Podemos permitir GET em '/' para health_check sem referer
     if request.path == '/' and request.method == 'GET':
-        return  # segue normalmente
-
+        return
     referer = request.headers.get("Referer")
     if not referer:
-        # Se não houver referer, bloqueia (ou você pode permitir se quiser)
         return jsonify({"error": "Acesso negado: referer ausente"}), 403
-
     parsed = urlparse(referer)
-    # O netloc contém o domínio + porta (ex: "www.sapphir-ai.com.br")
     if parsed.netloc not in ALLOWED_REFERRERS:
         return jsonify({"error": "Acesso negado: referer inválido"}), 403
 
@@ -93,14 +88,13 @@ def convert_audio(audio_bytes, target_format='wav'):
     """
     try:
         audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
-        audio = audio.set_sample_width(2)  # 16 bits por amostra
+        audio = audio.set_sample_width(2)
         sample_rate = audio.frame_rate
-        duration = len(audio) / 1000.0  # duração em segundos
+        duration = len(audio) / 1000.0
 
         audio_io = io.BytesIO()
         audio.export(audio_io, format=target_format)
         audio_io.seek(0)
-
         print(f"Áudio convertido para {target_format} com taxa de {sample_rate} Hz e duração de {duration} segundos")
         return audio_io, sample_rate, duration
     except Exception as e:
@@ -108,9 +102,7 @@ def convert_audio(audio_bytes, target_format='wav'):
         raise
 
 def upload_to_gcs(audio_io, bucket_name, destination_blob_name, content_type='audio/wav'):
-    """
-    Faz o upload do áudio (BytesIO) para o GCS utilizando as credenciais definidas e retorna o GCS URI.
-    """
+    """Faz o upload do áudio para o GCS e retorna o URI."""
     try:
         audio_io.seek(0)
         storage_key = os.getenv("GOOGLE_APPLICATION_STORAGE_CREDENTIALS_JSON")
@@ -122,7 +114,6 @@ def upload_to_gcs(audio_io, bucket_name, destination_blob_name, content_type='au
             storage_client = storage.Client(credentials=storage_credentials)
         else:
             storage_client = storage.Client()
-            
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(destination_blob_name)
         blob.upload_from_file(audio_io, content_type=content_type)
@@ -134,9 +125,7 @@ def upload_to_gcs(audio_io, bucket_name, destination_blob_name, content_type='au
         raise
 
 def delete_from_gcs(bucket_name, blob_name):
-    """
-    Exclui o objeto (arquivo) especificado no bucket do GCS.
-    """
+    """Exclui o arquivo especificado do bucket."""
     try:
         storage_key = os.getenv("GOOGLE_APPLICATION_STORAGE_CREDENTIALS_JSON")
         if storage_key:
@@ -155,6 +144,7 @@ def delete_from_gcs(bucket_name, blob_name):
         print(f"Erro ao deletar o arquivo do GCS: {str(e)}")
 
 def call_openai_completion(messages, max_tokens):
+    """Chama a API da OpenAI com até 3 tentativas."""
     retries = 3
     for i in range(retries):
         try:
@@ -186,7 +176,6 @@ def transcrever_audio():
             return jsonify({"error": f"Formato não suportado: {mime_type}. Formatos suportados: {SUPPORTED_FORMATS}"}), 400
 
         audio_stream_wav, sample_rate, duration = convert_audio(audio_bytes, target_format='wav')
-
         client = speech.SpeechClient()
 
         if duration <= 60:
@@ -212,7 +201,7 @@ def transcrever_audio():
             gcs_uri = upload_to_gcs(audio_stream_flac, GCS_BUCKET_NAME, destination_blob_name, content_type='audio/flac')
             recognition_audio = speech.RecognitionAudio(uri=gcs_uri)
             operation = client.long_running_recognize(config=config, audio=recognition_audio)
-            response = operation.result(timeout=600)  # Timeout de 600 segundos (10 minutos)
+            response = operation.result(timeout=600)
             delete_from_gcs(GCS_BUCKET_NAME, destination_blob_name)
 
         transcript = " ".join([result.alternatives[0].transcript for result in response.results])
@@ -228,6 +217,7 @@ def anamnese_texto():
     if not texto:
         return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
 
+    # Inicializa variáveis com valores padrão
     resumo = ""
     topicos = ""
     tratamentos = ""
@@ -267,7 +257,7 @@ def anamnese_texto():
                  "Com base exclusivamente na transcrição abaixo, identifique os principais tópicos da anamnese em no máximo 150 tokens, seguindo rigorosamente estas regras: Não complemente informações não mencionadas."
                  "\n\n- *Queixa Principal (QP):* [Descreva apenas se mencionado]."
                  "\n- *Evolução dos Sintomas:* [Inclua detalhes relevantes apenas se relatados]."
-                 "\n- *Fatores Agravantes e de Alívio:* [Informe conforme descrito, nao invente nada que nao foi descrito]."
+                 "\n- *Fatores Agravantes e de Alívio:* [Informe conforme descrito, não invente nada que não foi descrito]."
                  "\n- *Histórico Médico e Familiar:* [Detalhes apenas mencionados]."
                  "\n- *Achados do Exame Físico:* [Sinais vitais e achados relevantes explicitados]."
                  "\n- *Hipóteses Diagnósticas e Plano Terapêutico:* [Baseadas no relato]."
@@ -282,7 +272,7 @@ def anamnese_texto():
         try:
             tratamentos_response = call_openai_completion([
                 {"role": "system", "content": 
-                 "Com base nas informações fornecidas, sugira um plano diagnóstico e terapêutico adequado para o paciente em no maximo 200 tokens. "
+                 "Com base nas informações fornecidas, sugira um plano diagnóstico e terapêutico adequado para o paciente em no máximo 200 tokens. "
                  "Inclua as seguintes seções:"
                  "\n- Hipóteses Diagnósticas: Liste possíveis diagnósticos diferenciais."
                  "\n- Exames Complementares Solicitados: Informe quais exames são necessários."
