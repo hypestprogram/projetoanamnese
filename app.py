@@ -26,7 +26,7 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/credentials.json"
 # Nome do bucket do Cloud Storage para áudios longos
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
 
-# Inicializar o app Flask
+# Inicializar o app Flask e configurar CORS
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
@@ -36,7 +36,7 @@ def log_origin():
     origin = request.headers.get("Origin")
     print("Origin da requisição:", origin)
 
-# Em seguida, suas definições de rota...
+# Rota de Health Check
 @app.route('/', methods=['GET'])
 def health_check():
     return jsonify({"status": "API ativa e funcionando"}), 200
@@ -137,13 +137,12 @@ def transcrever_audio():
         if mime_type not in SUPPORTED_FORMATS:
             return jsonify({"error": f"Formato não suportado: {mime_type}. Formatos suportados: {SUPPORTED_FORMATS}"}), 400
 
-        # Converter áudio para WAV inicialmente para obter a taxa e duração (usado em áudios curtos)
+        # Converter áudio para WAV para áudios curtos
         audio_stream_wav, sample_rate, duration = convert_audio(audio_bytes, target_format='wav')
 
         client = speech.SpeechClient()
 
         if duration <= 60:
-            # Áudio curto: utiliza o método síncrono com áudio em WAV (LINEAR16)
             config = speech.RecognitionConfig(
                 encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
                 sample_rate_hertz=sample_rate,
@@ -153,11 +152,9 @@ def transcrever_audio():
             recognition_audio = speech.RecognitionAudio(content=audio_stream_wav.read())
             response = client.recognize(config=config, audio=recognition_audio)
         else:
-            # Áudio longo: converter para FLAC, reduzindo o tamanho e melhorando o processamento
             if not GCS_BUCKET_NAME:
                 return jsonify({"error": "GCS_BUCKET_NAME não configurado para áudios longos."}), 500
 
-            # Converter para FLAC
             audio_stream_flac, sample_rate, duration = convert_audio(audio_bytes, target_format="flac")
             config = speech.RecognitionConfig(
                 encoding=speech.RecognitionConfig.AudioEncoding.FLAC,
@@ -168,8 +165,7 @@ def transcrever_audio():
             gcs_uri = upload_to_gcs(audio_stream_flac, GCS_BUCKET_NAME, destination_blob_name, content_type='audio/flac')
             recognition_audio = speech.RecognitionAudio(uri=gcs_uri)
             operation = client.long_running_recognize(config=config, audio=recognition_audio)
-            response = operation.result(timeout=600)  # Timeout de 600 segundos (10 minutos)
-            # Após a transcrição, exclui o arquivo do GCS
+            response = operation.result(timeout=600)
             delete_from_gcs(GCS_BUCKET_NAME, destination_blob_name)
 
         transcript = " ".join([result.alternatives[0].transcript for result in response.results])
