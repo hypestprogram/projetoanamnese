@@ -29,21 +29,19 @@ GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
 
 # Inicializar o app Flask
 app = Flask(__name__)
-# Permitir acesso apenas às origens especificadas
 CORS(app, resources={r"/*": {"origins": [
     "https://anexarexames.onrender.com",
     "https://projetoanamnese.onrender.com",
     "https://sapphir-ai.com.br",
     "https://www.sapphir-ai.com.br"
 ]}})
-
+ 
 # Função para logar o cabeçalho Origin de cada requisição
 @app.before_request
 def log_origin():
     origin = request.headers.get("Origin")
     print("Origin da requisição:", origin)
 
-# Rota de Health Check
 @app.route('/', methods=['GET'])
 def health_check():
     return jsonify({"status": "API ativa e funcionando"}), 200
@@ -160,7 +158,7 @@ def transcrever_audio():
         if mime_type not in SUPPORTED_FORMATS:
             return jsonify({"error": f"Formato não suportado: {mime_type}. Formatos suportados: {SUPPORTED_FORMATS}"}), 400
 
-        # Converter áudio para WAV inicialmente para áudios curtos
+        # Converter áudio para WAV para áudios curtos
         audio_stream_wav, sample_rate, duration = convert_audio(audio_bytes, target_format='wav')
 
         client = speech.SpeechClient()
@@ -203,63 +201,77 @@ def anamnese_texto():
     texto = data.get('texto', '')
     if not texto:
         return jsonify({"error": "Nenhum texto de anamnese enviado"}), 400
+
+    # Inicializa variáveis com valores padrão (vazio)
+    resumo = ""
+    topicos = ""
+    tratamentos = ""
     try:
-        # Chamada para gerar o resumo
-        resumo_response = call_openai_completion([
-            {"role": "system", "content": 
-             "Com base exclusivamente na transcrição abaixo, gere uma anamnese no formato SOAP, seguindo estas regras:"
-             "\n\n*1. Fidelidade ao texto:* Não complemente informações não mencionadas. Se algo não for relatado, escreva 'Não relatado'."
-             "\n\n*2. Formato SOAP:*"
-             "\n- *S (Subjetivo):* Dados relatados pelo paciente."
-             "\n  - Identificação: [Iniciais], [Idade], [Sexo]."
-             "\n  - Queixa Principal (QP): [Descreva sintomas e duração apenas se mencionados]."
-             "\n  - História da Doença Atual (HDA): [Relate início, evolução, fatores agravantes/alívio, sintomas associados apenas como descrito]."
-             "\n  - Antecedentes: [Inclua histórico médico, cirúrgico, medicamentoso, familiar e social somente se mencionados]."
-             "\n\n- *O (Objetivo):* Dados observáveis ou registrados."
-             "\n  - Exame Físico: [Sinais vitais e achados explicitamente descritos]."
-             "\n  - Exames Complementares: [Resuma resultados conforme as regras abaixo]."
-             "\n\n*Regras para Exames:*"
-             "\n- Formato: Data | Resultados resumidos com abreviações e números absolutos (Ex.: HB: 14.5 | HT: 42% | Troponina: 3.2)."
-             "\n- Use abreviações: Hemoglobina → HB | Hematócrito → HT | Troponina → TRP."
-             "\n- Exclua: Hemácias, valores normais ou unidades."
-             "\n\n- *A (Avaliação):* Liste hipóteses diagnósticas com base no relato. Não justifique além do descrito."
-             "\n\n- *P (Plano):* Proposta terapêutica com base nos dados."
-             "\n  - Conduta: [Exames solicitados, medicações e orientações mencionadas]."
-            },
-            {"role": "user", "content": texto}
-        ], max_tokens=150)
+        try:
+            resumo_response = call_openai_completion([
+                {"role": "system", "content": 
+                 "Com base exclusivamente na transcrição abaixo, gere uma anamnese no formato SOAP, seguindo estas regras:"
+                 "\n\n*1. Fidelidade ao texto:* Não complemente informações não mencionadas. Se algo não for relatado, escreva 'Não relatado'."
+                 "\n\n*2. Formato SOAP:*"
+                 "\n- *S (Subjetivo):* Dados relatados pelo paciente."
+                 "\n  - Identificação: [Iniciais], [Idade], [Sexo]."
+                 "\n  - Queixa Principal (QP): [Descreva sintomas e duração apenas se mencionados]."
+                 "\n  - História da Doença Atual (HDA): [Relate início, evolução, fatores agravantes/alívio, sintomas associados apenas como descrito]."
+                 "\n  - Antecedentes: [Inclua histórico médico, cirúrgico, medicamentoso, familiar e social somente se mencionados]."
+                 "\n\n- *O (Objetivo):* Dados observáveis ou registrados."
+                 "\n  - Exame Físico: [Sinais vitais e achados explicitamente descritos]."
+                 "\n  - Exames Complementares: [Resuma resultados conforme as regras abaixo]."
+                 "\n\n*Regras para Exames:*"
+                 "\n- Formato: Data | Resultados resumidos com abreviações e números absolutos (Ex.: HB: 14.5 | HT: 42% | Troponina: 3.2)."
+                 "\n- Use abreviações: Hemoglobina → HB | Hematócrito → HT | Troponina → TRP."
+                 "\n- Exclua: Hemácias, valores normais ou unidades."
+                 "\n\n- *A (Avaliação):* Liste hipóteses diagnósticas com base no relato. Não justifique além do descrito."
+                 "\n\n- *P (Plano):* Proposta terapêutica com base nos dados."
+                 "\n  - Conduta: [Exames solicitados, medicações e orientações mencionadas]."
+                },
+                {"role": "user", "content": texto}
+            ], max_tokens=150)
+            resumo = resumo_response['choices'][0]['message']['content'].strip()
+        except Exception as e:
+            print(f"Erro ao gerar resumo: {e}")
+            resumo = ""
 
-        # Chamada para extrair os tópicos
-        topicos_response = call_openai_completion([
-            {"role": "system", "content": 
-             "Com base exclusivamente na transcrição abaixo, identifique os principais tópicos da anamnese em no máximo 150 tokens, seguindo rigorosamente estas regras: Não complemente informações não mencionadas."
-             "\n\n- *Queixa Principal (QP):* [Descreva apenas se mencionado]."
-             "\n- *Evolução dos Sintomas:* [Inclua detalhes relevantes se relatados]."
-             "\n- *Fatores Agravantes e de Alívio:* [Informe conforme descrito]."
-             "\n- *Histórico Médico e Familiar:* [Detalhes apenas mencionados]."
-             "\n- *Achados do Exame Físico:* [Sinais vitais e achados relevantes explicitados]."
-             "\n- *Hipóteses Diagnósticas e Plano Terapêutico:* [Baseadas no relato]."
-            },
-            {"role": "user", "content": texto}
-        ], max_tokens=150)
+        try:
+            topicos_response = call_openai_completion([
+                {"role": "system", "content": 
+                 "Com base exclusivamente na transcrição abaixo, identifique os principais tópicos da anamnese em no máximo 150 tokens, seguindo rigorosamente estas regras: Não complemente informações não mencionadas."
+                 "\n\n- *Queixa Principal (QP):* [Descreva apenas se mencionado]."
+                 "\n- *Evolução dos Sintomas:* [Inclua detalhes relevantes se relatados]."
+                 "\n- *Fatores Agravantes e de Alívio:* [Informe conforme descrito]."
+                 "\n- *Histórico Médico e Familiar:* [Detalhes apenas mencionados]."
+                 "\n- *Achados do Exame Físico:* [Sinais vitais e achados relevantes explicitados]."
+                 "\n- *Hipóteses Diagnósticas e Plano Terapêutico:* [Baseadas no relato]."
+                },
+                {"role": "user", "content": texto}
+            ], max_tokens=150)
+            topicos = topicos_response['choices'][0]['message']['content'].strip()
+        except Exception as e:
+            print(f"Erro ao gerar tópicos: {e}")
+            topicos = ""
 
-        # Chamada para obter o plano terapêutico
-        tratamentos_response = call_openai_completion([
-            {"role": "system", "content": 
-             "Com base nas informações fornecidas, sugira um plano diagnóstico e terapêutico adequado para o paciente em no maximo 200 tokens. "
-             "Inclua as seguintes seções:"
-             "\n- Hipóteses Diagnósticas: Liste possíveis diagnósticos diferenciais."
-             "\n- Exames Complementares Solicitados: Informe quais exames são necessários."
-             "\n- Medicações Prescritas: Liste as medicações recomendadas."
-             "\n- Orientações ao Paciente: Descreva orientações e recomendações ao paciente."
-             "\n- Seguimento e Reavaliação: Informe sobre o plano de seguimento e necessidade de reavaliações futuras."
-            },
-            {"role": "user", "content": texto}
-        ], max_tokens=200)
+        try:
+            tratamentos_response = call_openai_completion([
+                {"role": "system", "content": 
+                 "Com base nas informações fornecidas, sugira um plano diagnóstico e terapêutico adequado para o paciente em no maximo 200 tokens. "
+                 "Inclua as seguintes seções:"
+                 "\n- Hipóteses Diagnósticas: Liste possíveis diagnósticos diferenciais."
+                 "\n- Exames Complementares Solicitados: Informe quais exames são necessários."
+                 "\n- Medicações Prescritas: Liste as medicações recomendadas."
+                 "\n- Orientações ao Paciente: Descreva orientações e recomendações ao paciente."
+                 "\n- Seguimento e Reavaliação: Informe sobre o plano de seguimento e necessidade de reavaliações futuras."
+                },
+                {"role": "user", "content": texto}
+            ], max_tokens=200)
+            tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
+        except Exception as e:
+            print(f"Erro ao gerar tratamentos: {e}")
+            tratamentos = ""
 
-        resumo = resumo_response['choices'][0]['message']['content'].strip()
-        topicos = topicos_response['choices'][0]['message']['content'].strip()
-        tratamentos = tratamentos_response['choices'][0]['message']['content'].strip()
         return jsonify({"resumo": resumo, "topicos": topicos, "tratamentos": tratamentos})
     except Exception as e:
         print(f"Erro na anamnese: {str(e)}")
