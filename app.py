@@ -30,6 +30,17 @@ GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+# Função para logar o cabeçalho Origin de cada requisição
+@app.before_request
+def log_origin():
+    origin = request.headers.get("Origin")
+    print("Origin da requisição:", origin)
+
+# Em seguida, suas definições de rota...
+@app.route('/', methods=['GET'])
+def health_check():
+    return jsonify({"status": "API ativa e funcionando"}), 200
+
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
 
 def verificar_ffmpeg():
@@ -109,10 +120,6 @@ def delete_from_gcs(bucket_name, blob_name):
         print(f"Arquivo '{blob_name}' deletado do bucket '{bucket_name}'.")
     except Exception as e:
         print(f"Erro ao deletar o arquivo do GCS: {str(e)}")
-
-@app.route('/', methods=['GET'])
-def health_check():
-    return jsonify({"status": "API ativa e funcionando"}), 200
 
 @app.route('/transcrever', methods=['POST'])
 def transcrever_audio():
@@ -209,7 +216,7 @@ def anamnese_texto():
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": 
-                 "Com base exclusivamente na transcrição abaixo, identifique os principais tópicos da anamnese em no máximo 150 tokens, seguindo rigorosamente estas regras:"
+                 "Com base exclusivamente na transcrição abaixo, identifique os principais tópicos da anamnese em no máximo 150 tokens, seguindo rigorosamente estas regras: Não complemente informações não mencionadas."
                  "\n\n- *Queixa Principal (QP):* [Descreva apenas se mencionado]."
                  "\n- *Evolução dos Sintomas:* [Inclua detalhes relevantes se relatados]."
                  "\n- *Fatores Agravantes e de Alívio:* [Informe conforme descrito]."
