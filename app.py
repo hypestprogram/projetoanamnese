@@ -30,7 +30,6 @@ GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-
 SUPPORTED_FORMATS = ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav', 'audio/mp4']
 
 def verificar_ffmpeg():
@@ -210,7 +209,7 @@ def anamnese_texto():
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": 
-                 "Com base exclusivamente na transcrição abaixo, identifique os principais tópicos da anamnese em no máximo 150 tokens, seguindo rigorosamente estas regras: Não complemente informações não mencionadas."
+                 "Com base exclusivamente na transcrição abaixo, identifique os principais tópicos da anamnese em no máximo 150 tokens, seguindo rigorosamente estas regras:"
                  "\n\n- *Queixa Principal (QP):* [Descreva apenas se mencionado]."
                  "\n- *Evolução dos Sintomas:* [Inclua detalhes relevantes se relatados]."
                  "\n- *Fatores Agravantes e de Alívio:* [Informe conforme descrito]."
